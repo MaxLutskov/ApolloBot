@@ -1,0 +1,13 @@
+**/bin/
+**/obj/
+**/node_modules/
+**/.vite-cache/
+**/wwwroot/miniapp/
+**/*.tsbuildinfo
+.vs/
+.idea/
+.env
+*.user
+.codex-remote-attachments/
+.tools/
+.test-output/

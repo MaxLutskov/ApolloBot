@@ -1,0 +1,1410 @@
+[
+  {
+    "Key": "site1",
+    "Kind": "site",
+    "Label": "ВДВП №1",
+    "Parent": null,
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "site2",
+    "Kind": "site",
+    "Label": "ВДВП №2",
+    "Parent": null,
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "site3",
+    "Kind": "site",
+    "Label": "ВДВП №3",
+    "Parent": null,
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "site4",
+    "Kind": "site",
+    "Label": "ВДВП №4",
+    "Parent": null,
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "site5",
+    "Kind": "site",
+    "Label": "ВДВП №5",
+    "Parent": null,
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "site6",
+    "Kind": "site",
+    "Label": "ВДВП №6",
+    "Parent": null,
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "site7",
+    "Kind": "site",
+    "Label": "ВДВП №7",
+    "Parent": null,
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "site8",
+    "Kind": "site",
+    "Label": "ВДВП №8",
+    "Parent": null,
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "site9",
+    "Kind": "site",
+    "Label": "ВДВП №9",
+    "Parent": null,
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "site10",
+    "Kind": "site",
+    "Label": "ВДВП №10",
+    "Parent": null,
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "site11",
+    "Kind": "site",
+    "Label": "ВДВП №11",
+    "Parent": null,
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "site12",
+    "Kind": "site",
+    "Label": "ВДВП №12",
+    "Parent": null,
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "site13",
+    "Kind": "site",
+    "Label": "ВДВП №13",
+    "Parent": null,
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "site14",
+    "Kind": "site",
+    "Label": "ВДВП №14",
+    "Parent": null,
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "site22",
+    "Kind": "site",
+    "Label": "ВДВП №22",
+    "Parent": null,
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "site42",
+    "Kind": "site",
+    "Label": "ВДВП №42",
+    "Parent": null,
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "site43",
+    "Kind": "site",
+    "Label": "ВДВП №43",
+    "Parent": null,
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "site47",
+    "Kind": "site",
+    "Label": "ВДВП №47",
+    "Parent": null,
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "site49",
+    "Kind": "site",
+    "Label": "ВДВП №49",
+    "Parent": null,
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "shift1",
+    "Kind": "shift",
+    "Label": "1",
+    "Parent": null,
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "shift2",
+    "Kind": "shift",
+    "Label": "2",
+    "Parent": null,
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "person5",
+    "Kind": "person",
+    "Label": "Лісовий Артур",
+    "Parent": null,
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "person6",
+    "Kind": "person",
+    "Label": "Олійник Антон",
+    "Parent": null,
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "person7",
+    "Kind": "person",
+    "Label": "Павлишин Олег",
+    "Parent": null,
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "machine1",
+    "Kind": "machine",
+    "Label": "APOLLO №1",
+    "Parent": null,
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "machine2",
+    "Kind": "machine",
+    "Label": "APOLLO №2",
+    "Parent": null,
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "machine3",
+    "Kind": "machine",
+    "Label": "APOLLO №3",
+    "Parent": null,
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "machine4",
+    "Kind": "machine",
+    "Label": "APOLLO №4",
+    "Parent": null,
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "repair0",
+    "Kind": "repairMethod",
+    "Label": "Самостійно",
+    "Parent": null,
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "repair1",
+    "Kind": "repairMethod",
+    "Label": "Залучення РМД",
+    "Parent": null,
+    "RequiresDescription": false,
+    "RequiresReserve": true
+  },
+  {
+    "Key": "repair2",
+    "Kind": "repairMethod",
+    "Label": "Залучення АСКВ",
+    "Parent": null,
+    "RequiresDescription": false,
+    "RequiresReserve": true
+  },
+  {
+    "Key": "repair3",
+    "Kind": "repairMethod",
+    "Label": "Залучення логістики",
+    "Parent": null,
+    "RequiresDescription": false,
+    "RequiresReserve": true
+  },
+  {
+    "Key": "J",
+    "Kind": "part",
+    "Label": "Жатка",
+    "Parent": null,
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "J14",
+    "Kind": "node",
+    "Label": "Транспортувальна стрічка",
+    "Parent": "J",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "J15",
+    "Kind": "fault",
+    "Label": "пошкодження обмежуючих уголків",
+    "Parent": "J14",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "J16",
+    "Kind": "fault",
+    "Label": "розрив підбральної срічки",
+    "Parent": "J14",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "J17",
+    "Kind": "fault",
+    "Label": "розрив поперечної стрічки",
+    "Parent": "J14",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "J18",
+    "Kind": "fault",
+    "Label": "не крутяться підборочні стрічки(ліва сторона)",
+    "Parent": "J14",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "J19",
+    "Kind": "fault",
+    "Label": "не крутяться підборочні стрічки(права  сторона)",
+    "Parent": "J14",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "J14other",
+    "Kind": "fault",
+    "Label": "Інша несправність",
+    "Parent": "J14",
+    "RequiresDescription": true,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "J24",
+    "Kind": "node",
+    "Label": "Гідравліка",
+    "Parent": "J",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "J25",
+    "Kind": "fault",
+    "Label": "витік гідравлічної оливи з гідромотора",
+    "Parent": "J24",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "J26",
+    "Kind": "fault",
+    "Label": "пошкоджена гідравлічної шланги",
+    "Parent": "J24",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "J27",
+    "Kind": "fault",
+    "Label": "несправність гідравлічної трубки",
+    "Parent": "J24",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "J24other",
+    "Kind": "fault",
+    "Label": "Інша несправність",
+    "Parent": "J24",
+    "RequiresDescription": true,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "J29",
+    "Kind": "node",
+    "Label": "Лижі",
+    "Parent": "J",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "J30",
+    "Kind": "fault",
+    "Label": "деформована",
+    "Parent": "J29",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "J31",
+    "Kind": "fault",
+    "Label": "відпала",
+    "Parent": "J29",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "J32",
+    "Kind": "fault",
+    "Label": "заміна",
+    "Parent": "J29",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "J33",
+    "Kind": "fault",
+    "Label": "налаштування",
+    "Parent": "J29",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "J29other",
+    "Kind": "fault",
+    "Label": "Інша несправність",
+    "Parent": "J29",
+    "RequiresDescription": true,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "J34",
+    "Kind": "node",
+    "Label": "Вали",
+    "Parent": "J",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "J35",
+    "Kind": "fault",
+    "Label": "деформація (згинання)",
+    "Parent": "J34",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "J36",
+    "Kind": "fault",
+    "Label": "заклинив вал підбиральної стрічки",
+    "Parent": "J34",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "J37",
+    "Kind": "fault",
+    "Label": "заклинив холостий ролик поперечноїстрічки",
+    "Parent": "J34",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "J38",
+    "Kind": "fault",
+    "Label": "лопнув вал підбиральної стрічки",
+    "Parent": "J34",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "J34other",
+    "Kind": "fault",
+    "Label": "Інша несправність",
+    "Parent": "J34",
+    "RequiresDescription": true,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "J40",
+    "Kind": "node",
+    "Label": "Підшипники",
+    "Parent": "J",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "J41",
+    "Kind": "fault",
+    "Label": "вийшов зладу підшипник поперечної стрічки",
+    "Parent": "J40",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "J40other",
+    "Kind": "fault",
+    "Label": "Інша несправність",
+    "Parent": "J40",
+    "RequiresDescription": true,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "J43",
+    "Kind": "node",
+    "Label": "Рама (каркас)",
+    "Parent": "J",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "J44",
+    "Kind": "fault",
+    "Label": "Відпав демфер",
+    "Parent": "J43",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "J45",
+    "Kind": "fault",
+    "Label": "не працює демфер",
+    "Parent": "J43",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "J46",
+    "Kind": "fault",
+    "Label": "деформація фіксатора жатки (зігнули)",
+    "Parent": "J43",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "J47",
+    "Kind": "fault",
+    "Label": "відпав захист жатки з права",
+    "Parent": "J43",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "J48",
+    "Kind": "fault",
+    "Label": "відпав захист жатки з ліва",
+    "Parent": "J43",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "J49",
+    "Kind": "fault",
+    "Label": "лопнула каркас секції підбиральної стрічки",
+    "Parent": "J43",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "J50",
+    "Kind": "fault",
+    "Label": "деформація скоби підбиральної стрічки",
+    "Parent": "J43",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "J43other",
+    "Kind": "fault",
+    "Label": "Інша несправність",
+    "Parent": "J43",
+    "RequiresDescription": true,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "J52",
+    "Kind": "node",
+    "Label": "Електрична частина",
+    "Parent": "J",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "J53",
+    "Kind": "fault",
+    "Label": "не працює кнопка повороту жатки",
+    "Parent": "J52",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "J54",
+    "Kind": "fault",
+    "Label": "не працює аварійна кнопка жатки",
+    "Parent": "J52",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "J55",
+    "Kind": "fault",
+    "Label": "не працює ліхтар освітлення жатки",
+    "Parent": "J52",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "J56",
+    "Kind": "fault",
+    "Label": "не працює габарит жатки",
+    "Parent": "J52",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "J57",
+    "Kind": "fault",
+    "Label": "пошкодження електропроводки жатка",
+    "Parent": "J52",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "J52other",
+    "Kind": "fault",
+    "Label": "Інша несправність",
+    "Parent": "J52",
+    "RequiresDescription": true,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "J59",
+    "Kind": "node",
+    "Label": "Зварювальні роботи",
+    "Parent": "J",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "J60",
+    "Kind": "fault",
+    "Label": "корпус",
+    "Parent": "J59",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "J61",
+    "Kind": "fault",
+    "Label": "захист",
+    "Parent": "J59",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "J59other",
+    "Kind": "fault",
+    "Label": "Інша несправність",
+    "Parent": "J59",
+    "RequiresDescription": true,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "K",
+    "Kind": "part",
+    "Label": "Причіп",
+    "Parent": null,
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "K14",
+    "Kind": "node",
+    "Label": "Ланцюг",
+    "Parent": "K",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "K15",
+    "Kind": "fault",
+    "Label": "несправність ланцюга приводу лотків(лопнув)",
+    "Parent": "K14",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "K16",
+    "Kind": "fault",
+    "Label": "лопнув болт кріплення тягового штифта",
+    "Parent": "K14",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "K17",
+    "Kind": "fault",
+    "Label": "злетів цеп з приводної зірки",
+    "Parent": "K14",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "K14other",
+    "Kind": "fault",
+    "Label": "Інша несправність",
+    "Parent": "K14",
+    "RequiresDescription": true,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "K18",
+    "Kind": "node",
+    "Label": "Ваги",
+    "Parent": "K",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "K19",
+    "Kind": "fault",
+    "Label": "не працюють ваги",
+    "Parent": "K18",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "K20",
+    "Kind": "fault",
+    "Label": "лопнув болт вагової тарілки",
+    "Parent": "K18",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "K18other",
+    "Kind": "fault",
+    "Label": "Інша несправність",
+    "Parent": "K18",
+    "RequiresDescription": true,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "K21",
+    "Kind": "node",
+    "Label": "Лоток",
+    "Parent": "K",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "K22",
+    "Kind": "fault",
+    "Label": "деформація рами",
+    "Parent": "K21",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "K23",
+    "Kind": "fault",
+    "Label": "заміна колеса на кронштейні",
+    "Parent": "K21",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "K24",
+    "Kind": "fault",
+    "Label": "заміна кронштейна лотка",
+    "Parent": "K21",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "K25",
+    "Kind": "fault",
+    "Label": "деформація гака",
+    "Parent": "K21",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "K26",
+    "Kind": "fault",
+    "Label": "заміна болта кріплення гака",
+    "Parent": "K21",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "K27",
+    "Kind": "fault",
+    "Label": "деформація колеса лотка",
+    "Parent": "K21",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "K28",
+    "Kind": "fault",
+    "Label": "пошкодження направляючого штифта",
+    "Parent": "K21",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "K29",
+    "Kind": "fault",
+    "Label": "лопнув тяговий штифт",
+    "Parent": "K21",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "K21other",
+    "Kind": "fault",
+    "Label": "Інша несправність",
+    "Parent": "K21",
+    "RequiresDescription": true,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "K30",
+    "Kind": "node",
+    "Label": "Електрична частина",
+    "Parent": "K",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "K31",
+    "Kind": "fault",
+    "Label": "не працює проблисковий маячок",
+    "Parent": "K30",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "K32",
+    "Kind": "fault",
+    "Label": "не працює ліхтар причепа",
+    "Parent": "K30",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "K33",
+    "Kind": "fault",
+    "Label": "пошкодження електропроводки причепа",
+    "Parent": "K30",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "K30other",
+    "Kind": "fault",
+    "Label": "Інша несправність",
+    "Parent": "K30",
+    "RequiresDescription": true,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "K35",
+    "Kind": "node",
+    "Label": "Гідравліка",
+    "Parent": "K",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "K36",
+    "Kind": "fault",
+    "Label": "Ппідтікання гідравлічної оливи з гідромотора каруселі",
+    "Parent": "K35",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "K37",
+    "Kind": "fault",
+    "Label": "пошкоджена гідравлічної шланги(оберту каруселі)",
+    "Parent": "K35",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "K38",
+    "Kind": "fault",
+    "Label": "не коректна робота каруселі оберту лотків",
+    "Parent": "K35",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "K39",
+    "Kind": "fault",
+    "Label": "підтікання оливи з гідроциліндра",
+    "Parent": "K35",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "K35other",
+    "Kind": "fault",
+    "Label": "Інша несправність",
+    "Parent": "K35",
+    "RequiresDescription": true,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "K40",
+    "Kind": "node",
+    "Label": "Зварювальні роботи",
+    "Parent": "K",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "K41",
+    "Kind": "fault",
+    "Label": "візок",
+    "Parent": "K40",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "K42",
+    "Kind": "fault",
+    "Label": "платформа",
+    "Parent": "K40",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "K43",
+    "Kind": "fault",
+    "Label": "причіп",
+    "Parent": "K40",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "K40other",
+    "Kind": "fault",
+    "Label": "Інша несправність",
+    "Parent": "K40",
+    "RequiresDescription": true,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "K44",
+    "Kind": "node",
+    "Label": "Колесо(причіпа)",
+    "Parent": "K",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "K45",
+    "Kind": "fault",
+    "Label": "пошкодження(люфт підшипника)",
+    "Parent": "K44",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "K46",
+    "Kind": "fault",
+    "Label": "заміна колеса(спустило)",
+    "Parent": "K44",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "K47",
+    "Kind": "fault",
+    "Label": "відсутній болт кріплення колеса",
+    "Parent": "K44",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "K48",
+    "Kind": "fault",
+    "Label": "несправність цепу на привід колеса",
+    "Parent": "K44",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "K44other",
+    "Kind": "fault",
+    "Label": "Інша несправність",
+    "Parent": "K44",
+    "RequiresDescription": true,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "L",
+    "Kind": "part",
+    "Label": "Машина",
+    "Parent": null,
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "L14",
+    "Kind": "node",
+    "Label": "Транспортувальна стрічка",
+    "Parent": "L",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "L15",
+    "Kind": "fault",
+    "Label": "пошкодження малої стрічки",
+    "Parent": "L14",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "L16",
+    "Kind": "fault",
+    "Label": "пошкодження стрічки головного тунелю",
+    "Parent": "L14",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "L17",
+    "Kind": "fault",
+    "Label": "пошкодження стрічки хобота",
+    "Parent": "L14",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "L14other",
+    "Kind": "fault",
+    "Label": "Інша несправність",
+    "Parent": "L14",
+    "RequiresDescription": true,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "L19",
+    "Kind": "node",
+    "Label": "Гідравліка",
+    "Parent": "L",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "L20",
+    "Kind": "fault",
+    "Label": "витік гідравлічної оливи",
+    "Parent": "L19",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "L21",
+    "Kind": "fault",
+    "Label": "розрив гідравлічної шланги",
+    "Parent": "L19",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "L22",
+    "Kind": "fault",
+    "Label": "не працює гідравліка на підняття хобота",
+    "Parent": "L19",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "L23",
+    "Kind": "fault",
+    "Label": "не працює гідравліка на рух",
+    "Parent": "L19",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "L19other",
+    "Kind": "fault",
+    "Label": "Інша несправність",
+    "Parent": "L19",
+    "RequiresDescription": true,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "L25",
+    "Kind": "node",
+    "Label": "Вали",
+    "Parent": "L",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "L26",
+    "Kind": "fault",
+    "Label": "не працює вал малої лєнти",
+    "Parent": "L25",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "L27",
+    "Kind": "fault",
+    "Label": "не працює вал центральної ленти",
+    "Parent": "L25",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "L28",
+    "Kind": "fault",
+    "Label": "не працює вал ленти хобота",
+    "Parent": "L25",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "L25other",
+    "Kind": "fault",
+    "Label": "Інша несправність",
+    "Parent": "L25",
+    "RequiresDescription": true,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "L30",
+    "Kind": "node",
+    "Label": "Підшипники",
+    "Parent": "L",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "L31",
+    "Kind": "fault",
+    "Label": "не працює підшипник валу малої стрічки",
+    "Parent": "L30",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "L32",
+    "Kind": "fault",
+    "Label": "не працює підшипник валу головної стрічки",
+    "Parent": "L30",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "L33",
+    "Kind": "fault",
+    "Label": "не працює підшипник валу стрічки хобота",
+    "Parent": "L30",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "L30other",
+    "Kind": "fault",
+    "Label": "Інша несправність",
+    "Parent": "L30",
+    "RequiresDescription": true,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "L35",
+    "Kind": "node",
+    "Label": "Корпус",
+    "Parent": "L",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "L36",
+    "Kind": "fault",
+    "Label": "пошкодження корпуса",
+    "Parent": "L35",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "L35other",
+    "Kind": "fault",
+    "Label": "Інша несправність",
+    "Parent": "L35",
+    "RequiresDescription": true,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "L39",
+    "Kind": "node",
+    "Label": "Електрична частина",
+    "Parent": "L",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "L40",
+    "Kind": "fault",
+    "Label": "помилка на панелі оператора",
+    "Parent": "L39",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "L41",
+    "Kind": "fault",
+    "Label": "не працює панель оператора",
+    "Parent": "L39",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "L42",
+    "Kind": "fault",
+    "Label": "не працює освітлення",
+    "Parent": "L39",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "L43",
+    "Kind": "fault",
+    "Label": "не працює джойстик навантаження, опускання \\ піднімання хобота",
+    "Parent": "L39",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "L44",
+    "Kind": "fault",
+    "Label": "Не працює джойстик під'їзду \\ від'їзду причепа та оберту каруселі",
+    "Parent": "L39",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "L45",
+    "Kind": "fault",
+    "Label": "Не працює джойстик опускання \\ піднімання жатки",
+    "Parent": "L39",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "L46",
+    "Kind": "fault",
+    "Label": "не працює кнопка тарування",
+    "Parent": "L39",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "L47",
+    "Kind": "fault",
+    "Label": "не працює кнопка аварійна",
+    "Parent": "L39",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "L49",
+    "Kind": "fault",
+    "Label": "не працює перемикач автоматичного руху",
+    "Parent": "L39",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "L50",
+    "Kind": "fault",
+    "Label": "не працює кнопка RESET-TARE",
+    "Parent": "L39",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "L51",
+    "Kind": "fault",
+    "Label": "не працює кнопка ON-RESTART",
+    "Parent": "L39",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "L52",
+    "Kind": "fault",
+    "Label": "пошкодження електропроводки",
+    "Parent": "L39",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "L53",
+    "Kind": "fault",
+    "Label": "несправність пульта управління",
+    "Parent": "L39",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "L54",
+    "Kind": "fault",
+    "Label": "не працює проблисковий маячок",
+    "Parent": "L39",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "L55",
+    "Kind": "fault",
+    "Label": "не працює джойстик керування рухом",
+    "Parent": "L39",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "L39other",
+    "Kind": "fault",
+    "Label": "Інша несправність",
+    "Parent": "L39",
+    "RequiresDescription": true,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "L57",
+    "Kind": "node",
+    "Label": "Двигун",
+    "Parent": "L",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "L59",
+    "Kind": "fault",
+    "Label": "не коректно працює двигун",
+    "Parent": "L57",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "L60",
+    "Kind": "fault",
+    "Label": "закипів",
+    "Parent": "L57",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "L61",
+    "Kind": "fault",
+    "Label": "не заводиться",
+    "Parent": "L57",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "L57other",
+    "Kind": "fault",
+    "Label": "Інша несправність",
+    "Parent": "L57",
+    "RequiresDescription": true,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "L63",
+    "Kind": "node",
+    "Label": "Зварювальні роботи",
+    "Parent": "L",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "L64",
+    "Kind": "fault",
+    "Label": "корпус",
+    "Parent": "L63",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "L65",
+    "Kind": "fault",
+    "Label": "захист",
+    "Parent": "L63",
+    "RequiresDescription": false,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "L63other",
+    "Kind": "fault",
+    "Label": "Інша несправність",
+    "Parent": "L63",
+    "RequiresDescription": true,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "other",
+    "Kind": "part",
+    "Label": "Інше",
+    "Parent": null,
+    "RequiresDescription": true,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "othernode",
+    "Kind": "node",
+    "Label": "Інше",
+    "Parent": "other",
+    "RequiresDescription": true,
+    "RequiresReserve": false
+  },
+  {
+    "Key": "otherfault",
+    "Kind": "fault",
+    "Label": "Інша несправність",
+    "Parent": "othernode",
+    "RequiresDescription": true,
+    "RequiresReserve": false
+  }
+]

@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="src/ApolloBreakdowns/ApolloBreakdowns.csproj" />
+  <Project Path="tests/ApolloBreakdowns.Tests/ApolloBreakdowns.Tests.csproj" />
+</Solution>
