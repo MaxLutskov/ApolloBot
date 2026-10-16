@@ -23,17 +23,40 @@ jobs:
         with:
           dotnet-version: '10.x'
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: src/ApolloBreakdowns/ClientApp/package-lock.json
+
       - name: Build with dotnet
-        run: dotnet build --configuration Release
+        run: dotnet build ApolloBreakdowns.slnx --configuration Release
+
+      - name: Verify application rules
+        run: dotnet run --project tests/ApolloBreakdowns.Tests --configuration Release --no-build
+
+      - name: Verify form logic
+        working-directory: src/ApolloBreakdowns/ClientApp
+        run: npm test
 
       - name: dotnet publish
-        run: dotnet publish -c Release -o ${{env.DOTNET_ROOT}}/myapp
+        run: dotnet publish src/ApolloBreakdowns/ApolloBreakdowns.csproj --configuration Release --no-build --no-restore --output "${{ github.workspace }}/publish"
+
+      - name: Verify deployment package
+        shell: bash
+        run: |
+          test -f publish/ApolloBreakdowns.dll
+          test -f publish/ApolloBreakdowns.runtimeconfig.json
+          test -f publish/wwwroot/miniapp/index.html
+          test ! -f publish/ApolloBreakdowns.Tests.runtimeconfig.json
 
       - name: Upload artifact for deployment job
         uses: actions/upload-artifact@v4
         with:
           name: .net-app
-          path: ${{env.DOTNET_ROOT}}/myapp
+          path: ${{ github.workspace }}/publish
+          if-no-files-found: error
 
   deploy:
     runs-on: ubuntu-latest
@@ -47,7 +70,8 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: .net-app
-      
+          path: publish
+
       - name: Login to Azure
         uses: azure/login@v2
         with:
@@ -61,5 +85,22 @@ jobs:
         with:
           app-name: 'AppolloBot'
           slot-name: 'Production'
-          package: .
-          
+          package: publish
+          startup-command: 'dotnet ApolloBreakdowns.dll'
+
+      - name: Verify running application and database
+        shell: bash
+        env:
+          APP_URL: ${{ steps.deploy-to-webapp.outputs.webapp-url }}
+        run: |
+          for attempt in $(seq 1 18); do
+            if curl --fail --silent --show-error --max-time 10 "${APP_URL%/}/health" --output /tmp/apollo-health.json &&
+               jq --exit-status '.status == "healthy"' /tmp/apollo-health.json; then
+              echo "APOLLO application and database are healthy."
+              exit 0
+            fi
+            echo "Waiting for APOLLO startup ($attempt/18)..."
+            sleep 10
+          done
+          echo "The package was deployed, but /health did not confirm application startup. Check App Service Log stream."
+          exit 1
