@@ -1,3 +1,4 @@
+using ApolloBreakdowns;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -10,22 +11,12 @@ using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
-var mode = builder.Configuration["Telegram:Mode"] ?? "Webhook";
-if (mode is not ("Demo" or "Webhook" or "Polling")) throw new InvalidOperationException("Unknown Telegram:Mode");
-if (mode == "Demo" && !builder.Environment.IsDevelopment()) throw new InvalidOperationException("Demo is only available in Development.");
-if (mode != "Demo")
-{
-    if (string.IsNullOrWhiteSpace(builder.Configuration.GetConnectionString("BotDatabase"))) throw new InvalidOperationException("ConnectionStrings:BotDatabase is required.");
-    if (string.IsNullOrWhiteSpace(builder.Configuration["Telegram:BotToken"])) throw new InvalidOperationException("Telegram:BotToken is required.");
-    if (!Uri.TryCreate(builder.Configuration["Telegram:PublicUrl"], UriKind.Absolute, out var url) || url.Scheme != "https") throw new InvalidOperationException("Telegram:PublicUrl must be HTTPS.");
-    if (mode == "Webhook" && (builder.Configuration["Telegram:WebhookSecret"] is not { Length: >= 32 and <= 256 } secret || secret.Any(c => !char.IsAsciiLetterOrDigit(c) && c is not ('_' or '-'))))
-        throw new InvalidOperationException("Telegram:WebhookSecret must contain 32–256 ASCII letters, digits, _ or -.");
-    if ((builder.Configuration.GetSection("Admin:TelegramIds").Get<long[]>() ?? []).Length == 0) throw new InvalidOperationException("At least one Admin:TelegramIds entry is required.");
-    if (builder.Configuration.GetValue<long>("Telegram:GroupChatId") >= 0) throw new InvalidOperationException("Telegram:GroupChatId must be the negative chat ID of the APOLLO group.");
-}
+var mode = StartupSettings.Normalize(builder.Configuration);
+var useMemory = mode == "Demo" || string.IsNullOrWhiteSpace(builder.Configuration.GetConnectionString("BotDatabase"));
+var memoryRoot = new Microsoft.EntityFrameworkCore.Storage.InMemoryDatabaseRoot();
 builder.WebHost.ConfigureKestrel(o => o.Limits.MaxRequestBodySize = 32768);
 builder.Services.AddDbContext<ApolloDbContext>(options => {
-    if (mode == "Demo") options.UseInMemoryDatabase("apollo-demo");
+    if (useMemory) options.UseInMemoryDatabase("apollo-demo", memoryRoot);
     else options.UseSqlServer(builder.Configuration.GetConnectionString("BotDatabase"), sql => sql.MigrationsHistoryTable("__EFMigrationsHistory", ApolloDbContext.Schema).EnableRetryOnFailure(3));
     options.UseAsyncSeeding(async (context, _, _) => await CatalogSeed.ApplyAsync((ApolloDbContext)context));
     options.UseSeeding((context, _) => CatalogSeed.ApplyAsync((ApolloDbContext)context).GetAwaiter().GetResult());
@@ -68,22 +59,36 @@ app.Use(async (ctx, next) => {
 });
 app.UseRateLimiter();
 app.MapGet("/", () => Results.Redirect("/miniapp/"));
-app.MapGet("/health", async (ApolloDbContext db, CancellationToken ct) => await db.Database.CanConnectAsync(ct) ? Results.Ok(new { status = "healthy" }) : Results.StatusCode(503));
+app.MapGet("/health", () => Results.Ok(new { status = "healthy", storage = useMemory ? "memory" : "sql", demo = builder.Configuration["Telegram:Mode"] == "Demo" }));
 app.MapPost("/api/telegram/webhook", async (HttpContext ctx, TelegramClient telegram, CancellationToken ct) => {
     var expected = builder.Configuration["Telegram:WebhookSecret"] ?? "";
     var supplied = ctx.Request.Headers["X-Telegram-Bot-Api-Secret-Token"].ToString();
-    if (mode != "Webhook" || expected.Length == 0 || !CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(expected), Encoding.UTF8.GetBytes(supplied))) return Results.NotFound();
+    if (builder.Configuration["Telegram:Mode"] != "Webhook" || expected.Length == 0 || !CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(expected), Encoding.UTF8.GetBytes(supplied))) return Results.NotFound();
     using var json = await JsonDocument.ParseAsync(ctx.Request.Body, cancellationToken: ct);
     await telegram.HandleUpdateAsync(json.RootElement, ct);
     return Results.Ok();
 });
 app.MapAppApi();
 app.MapFallbackToFile("/miniapp/{*path:nonfile}", "miniapp/index.html");
-await using (var scope = app.Services.CreateAsyncScope())
+try
 {
+    await using var scope = app.Services.CreateAsyncScope();
     var db = scope.ServiceProvider.GetRequiredService<ApolloDbContext>();
-    if (mode == "Demo") await db.Database.EnsureCreatedAsync();
-    else await db.Database.MigrateAsync();
+    if (useMemory) await db.Database.EnsureCreatedAsync();
+    else
+    {
+        using var startupTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+        await db.Database.MigrateAsync(startupTimeout.Token);
+    }
 }
+catch (Exception e) when (!useMemory)
+{
+    app.Logger.LogWarning("SQL initialization failed ({ErrorType}); starting test mode with temporary in-memory storage.", e.GetType().Name);
+    useMemory = true;
+    builder.Configuration["Telegram:Mode"] = "Demo";
+    await using var scope = app.Services.CreateAsyncScope();
+    await scope.ServiceProvider.GetRequiredService<ApolloDbContext>().Database.EnsureCreatedAsync();
+}
+if (useMemory) app.Logger.LogWarning("Temporary in-memory storage is active. Data is lost on restart.");
 await app.RunAsync();
 public partial class Program;

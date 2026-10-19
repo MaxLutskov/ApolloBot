@@ -1,4 +1,4 @@
-param([int]$Port = 5187, [string]$AppDirectory = '')
+param([int]$Port = 5187, [string]$AppDirectory = '', [switch]$NoSettings, [switch]$SqlFailure)
 $ErrorActionPreference = 'Stop'
 $taskRoot = Split-Path $PSScriptRoot -Parent
 $appRoot = if ($AppDirectory) { (Resolve-Path -LiteralPath $AppDirectory).Path } else { Join-Path $taskRoot 'src/ApolloBreakdowns' }
@@ -7,7 +7,7 @@ if (-not (Test-Path -LiteralPath $dll)) { throw 'Run dotnet build first.' }
 $logs = Join-Path $taskRoot '.test-output'
 New-Item -ItemType Directory -Path $logs -Force | Out-Null
 $originalEnvironment = $env:ASPNETCORE_ENVIRONMENT
-$env:ASPNETCORE_ENVIRONMENT = 'Development'
+$env:ASPNETCORE_ENVIRONMENT = 'Production'
 $serverProcess = $null
 $base = "http://127.0.0.1:$Port"
 $admin = @{ 'X-Demo-User-Id' = '1' }
@@ -19,15 +19,21 @@ function Request($path, $headers, $method = 'GET', $body = $null) {
     Invoke-WebRequest @arguments
 }
 try {
-    $serverProcess = Start-Process -FilePath (Get-Command dotnet).Source -ArgumentList @($dll, '--urls', $base, '--Telegram:Mode', 'Demo') -WorkingDirectory $appRoot -WindowStyle Hidden -PassThru -RedirectStandardOutput (Join-Path $logs 'server.log') -RedirectStandardError (Join-Path $logs 'server-error.log')
+    $serverArguments = @($dll, '--urls', $base)
+    if ($SqlFailure) {
+        $serverArguments += @('--Telegram:Mode', 'Webhook', '--Telegram:BotToken', 'test-token', '--ConnectionStrings:BotDatabase', '"Server=127.0.0.1,1;Database=unavailable;User Id=test;Password=test;Connect Timeout=1;Encrypt=False"')
+    } elseif (-not $NoSettings) { $serverArguments += @('--Telegram:Mode', 'Demo') }
+    $serverProcess = Start-Process -FilePath (Get-Command dotnet).Source -ArgumentList $serverArguments -WorkingDirectory $appRoot -WindowStyle Hidden -PassThru -RedirectStandardOutput (Join-Path $logs 'server.log') -RedirectStandardError (Join-Path $logs 'server-error.log')
     $ready = $false
-    for ($attempt = 0; $attempt -lt 40; $attempt++) {
+    for ($attempt = 0; $attempt -lt 160; $attempt++) {
         try { if ((Invoke-WebRequest "$base/health" -TimeoutSec 1).StatusCode -eq 200) { $ready = $true; break } } catch { }
         Start-Sleep -Milliseconds 250
     }
-    Assert $ready 'Server starts and database health passes'
+    Assert $ready 'Server starts without required external services in Production'
+    $health = Invoke-RestMethod "$base/health"
+    Assert ($health.storage -eq 'memory' -and $health.demo) 'Health reports temporary storage and browser test mode'
     Assert ((Invoke-WebRequest "$base/miniapp/" -SkipHttpErrorCheck).Content.Contains('APOLLO')) 'React entry is served'
-    Assert ((Request '/me' @{}).StatusCode -eq 401) 'Anonymous API request rejected'
+    Assert ((Request '/me' @{}).StatusCode -eq 200) 'Test mode opens in browser without Telegram or demo headers'
     Assert ((Request '/admin/notifications' $operator).StatusCode -eq 403) 'Operator cannot access administration'
     $options = (Request '/options' $operator).Content | ConvertFrom-Json
     Assert ($options.Count -eq 176) 'Workbook and repair choices loaded'

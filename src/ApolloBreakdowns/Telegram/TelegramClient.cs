@@ -38,7 +38,13 @@ public sealed class TelegramClient(HttpClient http, IConfiguration config, Break
         }
         if (chat.GetProperty("type").GetString() != "private") return;
         if (command is not ("/start" or "/help")) return;
-        var url = config["Telegram:PublicUrl"]!.TrimEnd('/') + "/miniapp/";
+        var publicUrl = config["Telegram:PublicUrl"];
+        if (!Uri.TryCreate(publicUrl, UriKind.Absolute, out var publicUri) || publicUri.Scheme != "https")
+        {
+            await SendAsync(chat.GetProperty("id").GetInt64(), "Бот працює. Адресу форми ще не налаштовано.", ct);
+            return;
+        }
+        var url = publicUrl!.TrimEnd('/') + "/miniapp/";
         await CallAsync("sendMessage", new {
             chat_id = chat.GetProperty("id").GetInt64(),
             text = "Облік поломок APOLLO\nВідкрийте форму, заповніть дані та надішліть заявку. Після збереження ви отримаєте підтвердження. Історія доступна у формі.",

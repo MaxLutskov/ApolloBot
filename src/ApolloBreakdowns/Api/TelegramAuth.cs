@@ -10,16 +10,16 @@ namespace ApolloBreakdowns.Api;
 // Adapted from VPF_Algorithm_Bot/Api/MiniAppAuth.cs.
 public sealed record AppUser(long Id, string Name, bool IsAdmin);
 
-public sealed class TelegramAuth(IConfiguration config, IWebHostEnvironment env)
+public sealed class TelegramAuth(IConfiguration config)
 {
     public AppUser? Authenticate(HttpRequest request)
     {
-        if (env.IsDevelopment() && config["Telegram:Mode"] == "Demo")
+        if (config["Telegram:Mode"] == "Demo")
         {
             return request.Headers["X-Demo-User-Id"].ToString() switch {
                 "1" => new(1, "Адміністратор (демо)", true),
                 "2" => new(2, "Оператор (демо)", false),
-                _ => null
+                _ => new(1, "Тестовий користувач", true)
             };
         }
         var raw = request.Headers["X-Telegram-Init-Data"].ToString();

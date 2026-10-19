@@ -16,6 +16,16 @@ async Task Reject(Func<Task> action, int status, string name) {
     try { await action(); throw new Exception("Expected rejection: " + name); }
     catch (RuleException e) { Check(e.Status == status, name); }
 }
+var emptySettings = new ConfigurationBuilder().AddInMemoryCollection().Build();
+Check(ApolloBreakdowns.StartupSettings.Normalize(emptySettings) == "Demo", "Missing all settings enables browser test mode");
+var minimalSettings = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> {
+    ["Telegram:BotToken"] = "test", ["Telegram:PublicUrl"] = "https://example.com", ["Telegram:WebhookSecret"] = "x"
+}).Build();
+Check(ApolloBreakdowns.StartupSettings.Normalize(minimalSettings) == "Webhook", "Short valid webhook secret, missing chat and admins do not block startup");
+minimalSettings["Telegram:WebhookSecret"] = "";
+Check(ApolloBreakdowns.StartupSettings.Normalize(minimalSettings) == "Polling", "Missing webhook secret falls back to polling");
+minimalSettings["App:TestMode"] = "true";
+Check(ApolloBreakdowns.StartupSettings.Normalize(minimalSettings) == "Demo", "Explicit test mode overrides configured Telegram");
 var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> {
     ["Telegram:Mode"] = "Demo", ["Telegram:GroupChatId"] = "-100123456", ["Telegram:BotToken"] = "test-token"
 }).Build();

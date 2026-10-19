@@ -88,7 +88,7 @@ jobs:
           package: publish
           startup-command: 'dotnet ApolloBreakdowns.dll'
 
-      - name: Verify running application and database
+      - name: Verify running application
         shell: bash
         env:
           APP_URL: ${{ steps.deploy-to-webapp.outputs.webapp-url }}
@@ -96,7 +96,8 @@ jobs:
           for attempt in $(seq 1 18); do
             if curl --fail --silent --show-error --max-time 10 "${APP_URL%/}/health" --output /tmp/apollo-health.json &&
                jq --exit-status '.status == "healthy"' /tmp/apollo-health.json; then
-              echo "APOLLO application and database are healthy."
+              echo "APOLLO application is running."
+              cat /tmp/apollo-health.json
               exit 0
             fi
             echo "Waiting for APOLLO startup ($attempt/18)..."

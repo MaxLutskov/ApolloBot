@@ -20,8 +20,9 @@ public sealed class TelegramWorker(IServiceScopeFactory scopes, IConfiguration c
                 var db = scope.ServiceProvider.GetRequiredService<ApolloDbContext>();
                 if (!initialized)
                 {
-                    var url = config["Telegram:PublicUrl"]!.TrimEnd('/');
-                    await telegram.CallAsync("setChatMenuButton", new { menu_button = new { type = "web_app", text = "Форма APOLLO", web_app = new { url = url + "/miniapp/" } } }, ct);
+                    var url = config["Telegram:PublicUrl"]?.TrimEnd('/');
+                    if (Uri.TryCreate(url, UriKind.Absolute, out var publicUri) && publicUri.Scheme == "https")
+                        await telegram.CallAsync("setChatMenuButton", new { menu_button = new { type = "web_app", text = "Форма APOLLO", web_app = new { url = url + "/miniapp/" } } }, ct);
                     if (mode == "Webhook")
                         await telegram.CallAsync("setWebhook", new { url = url + "/api/telegram/webhook", secret_token = config["Telegram:WebhookSecret"], allowed_updates = new[] { "message", "callback_query" }, drop_pending_updates = false }, ct);
                     else await telegram.CallAsync("deleteWebhook", new { drop_pending_updates = false }, ct);

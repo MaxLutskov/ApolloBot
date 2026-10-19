@@ -17,7 +17,7 @@ public static class Endpoints
     public static void MapAppApi(this WebApplication app)
     {
         var api = app.MapGroup("/api/app").RequireRateLimiting("api");
-        api.MapGet("/me", (HttpContext ctx, IConfiguration cfg) => Results.Ok(new { user = User(ctx), demo = cfg["Telegram:Mode"] == "Demo" }));
+        api.MapGet("/me", (HttpContext ctx, IConfiguration cfg, ApolloDbContext db) => Results.Ok(new { user = User(ctx), demo = cfg["Telegram:Mode"] == "Demo", temporaryStorage = db.Database.IsInMemory() }));
         api.MapGet("/options", async (HttpContext ctx, ApolloDbContext db, CancellationToken ct) => {
             var query = db.Options.AsNoTracking();
             if (!User(ctx).IsAdmin) query = query.Where(x => x.Active);
