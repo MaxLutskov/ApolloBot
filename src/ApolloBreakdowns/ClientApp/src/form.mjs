@@ -31,7 +31,7 @@ export function missingFields(form, options) {
   const fields = [['siteId', 'Дільниця', 'site'], ['shiftId', 'Зміна', 'shift'], ['machineId', 'Комбайн', 'machine'],
     ['partId', 'Частина обладнання', 'part'], ['nodeId', 'Вузол', 'node'], ['faultId', 'Несправність / вид робіт', 'fault'], ['repairMethodId', 'Виконання ремонту', 'repairMethod']]
   const result = fields.filter(([key, , kind]) => !options.some(x => x.id === Number(form[key]) && x.kind === kind && x.active)).map(([field, label]) => ({ field, label }))
-  if (form.person.trim().length < 2) result.unshift({ field: 'person', label: 'Відповідальний працівник (щонайменше 2 символи)' })
+  if (!options.some(x => x.kind === 'person' && x.active && x.label === form.person)) result.unshift({ field: 'person', label: 'Відповідальний працівник' })
   if (options.some(x => [form.partId, form.nodeId, form.faultId].includes(String(x.id)) && x.requiresDescription) && !form.description.trim())
     result.push({ field: 'description', label: 'Додатковий опис' })
   if (options.some(x => x.id === Number(form.repairMethodId) && x.requiresReserve) && !['yes', 'no'].includes(form.hasReserveApollo))

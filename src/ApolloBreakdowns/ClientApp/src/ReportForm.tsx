@@ -26,8 +26,9 @@ export default function ReportForm({ user, options, reloadOptions, onHistory }: 
   const needsReserve = options.some(o => o.id === +form.repairMethodId && o.requiresReserve)
   const select = (name: keyof Form, label: string, kind: string, placeholder: string, parent?: string) => {
     const list = available(options, kind, parent) as Option[]
-    const stale = form[name] && !list.some(x => String(x.id) === form[name])
-    return <label className="field">{label} <span className="required">*</span><select name={name} aria-invalid={invalidField(name)} value={form[name]} required disabled={busy || (parent !== undefined && (!parent || options.some(x => x.id === Number(parent) && x.isOther)))} onChange={e => set(name, e.target.value)}><option value="">{placeholder}</option>{stale && <option value={form[name]} disabled>Варіант недоступний — оберіть інший</option>}{list.map(x => <option key={x.id} value={x.id}>{x.label}</option>)}</select>{invalidField(name) && <small className="error">Заповніть поле «{label}».</small>}{stale && <small className="error">Оберіть доступний варіант.</small>}</label>
+    const optionValue = (option: Option) => name === 'person' ? option.label : String(option.id)
+    const stale = form[name] && !list.some(x => optionValue(x) === form[name])
+    return <label className="field">{label} <span className="required">*</span><select name={name} aria-invalid={invalidField(name)} value={form[name]} required disabled={busy || (parent !== undefined && (!parent || options.some(x => x.id === Number(parent) && x.isOther)))} onChange={e => set(name, e.target.value)}><option value="">{placeholder}</option>{stale && <option value={form[name]} disabled>Варіант недоступний — оберіть інший</option>}{list.map(x => <option key={x.id} value={optionValue(x)}>{x.label}</option>)}</select>{invalidField(name) && <small className="error">Заповніть поле «{label}».</small>}{stale && <small className="error">Оберіть доступний варіант.</small>}</label>
   }
   const reset = () => { setForm(blank()); setError(''); setReceipt(null); setValidated(false) }
   async function submit(event: React.FormEvent) {
@@ -56,7 +57,7 @@ export default function ReportForm({ user, options, reloadOptions, onHistory }: 
     <fieldset disabled={busy}><legend><span>01</span> Місце та відповідальний</legend><div className="grid">
       {select('siteId', 'Дільниця', 'site', 'Оберіть дільницю')}
       {select('shiftId', 'Зміна', 'shift', 'Оберіть зміну')}
-      <label className="field">Відповідальний працівник <span className="required">*</span><input name="person" aria-invalid={invalidField("person")} list="people" autoComplete="name" value={form.person} minLength={2} maxLength={300} required placeholder="Прізвище та ім’я" onChange={e => set('person', e.target.value)} /><datalist id="people">{options.filter(o => o.kind === 'person' && o.active).map(o => <option key={o.id} value={o.label} />)}</datalist>{invalidField("person") && <small className="error">Вкажіть ПІБ працівника (щонайменше 2 символи).</small>}</label>
+      {select('person', 'Відповідальний працівник', 'person', 'Оберіть працівника')}
       {select('machineId', 'Комбайн', 'machine', 'Оберіть APOLLO')}
     </div></fieldset>
     <fieldset disabled={busy}><legend><span>02</span> Що сталося</legend><div className="grid">
