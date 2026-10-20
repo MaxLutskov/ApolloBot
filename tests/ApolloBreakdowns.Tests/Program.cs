@@ -171,7 +171,7 @@ Check(!handler.Calls.Last().Json.Contains("reply_markup"), "Private confirmation
 await telegram.SendDocumentAsync(22, await HistoryExport.BuildAsync(db, default), default);
 Check(handler.Calls.Last().Method == "sendDocument" && handler.Calls.Last().Json.Contains("Apollo-history.csv"), "CSV is sent as an actual Telegram document");
 var csvBytes = await HistoryExport.BuildAsync(db, default);
-Check(csvBytes.Take(3).SequenceEqual(new byte[] { 239, 187, 191 }) && Encoding.UTF8.GetString(csvBytes).Contains("Ремонт, сек"), "CSV includes UTF-8 BOM and separate repair duration");
+Check(csvBytes.Take(3).SequenceEqual(new byte[] { 239, 187, 191 }) && Encoding.UTF8.GetString(csvBytes).Contains("Простій, хв") && Encoding.UTF8.GetString(csvBytes).Contains("Ремонт, сек"), "CSV includes UTF-8 BOM and separate repair duration");
 var reminderService = new ReminderService(db, config);
 var morning = new DateTimeOffset(2026, 10, 20, 4, 0, 0, TimeSpan.Zero); // 07:00 Kyiv.
 db.Reminders.AddRange(new ReminderSchedule { Time = "07:00" }, new ReminderSchedule { Time = "12:00" });

@@ -118,7 +118,7 @@ try {
     Assert (-not (((Request '/options' $admin).Content | ConvertFrom-Json) | Where-Object { $_.id -eq $newPart.id -or $_.parentId -eq $newPart.id -or $_.parentId -eq $otherNode.id })) 'Deleted subtree is hidden'
     Assert (((Request '/breakdowns' $operator).Content | ConvertFrom-Json).total -eq 2) 'Catalog deletion does not delete reports'
     $csv = Request '/export' $operator
-    Assert ($csv.StatusCode -eq 200 -and $csv.Content.Contains('Простій, сек') -and $csv.Content.Contains('Ремонт, сек')) 'CSV contains automatic downtime'
+    Assert ($csv.StatusCode -eq 200 -and $csv.Content.Contains('Простій, хв') -and $csv.Content.Contains('Ремонт, сек')) 'CSV contains automatic downtime'
     Assert ((Invoke-WebRequest "$base/api/telegram/webhook" -Method POST -Body '{}' -ContentType 'application/json' -SkipHttpErrorCheck).StatusCode -eq 404) 'Demo webhook rejects Telegram callbacks'
     Write-Output 'All HTTP smoke checks passed.'
 } finally {
