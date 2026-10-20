@@ -30,10 +30,21 @@ try {
         Start-Sleep -Milliseconds 250
     }
     Assert $ready 'Server starts without required external services in Production'
+    Assert ((Invoke-WebRequest "$base/miniapp/" -SkipHttpErrorCheck).Content.Contains('APOLLO')) 'React entry is served independently of storage initialization'
+    $storageReady = $false
+    for ($attempt = 0; $attempt -lt 160; $attempt++) {
+        if ((Invoke-RestMethod "$base/health").storageReady) { $storageReady = $true; break }
+        Start-Sleep -Milliseconds 250
+    }
+    Assert $storageReady 'Storage initializes or falls back without blocking HTTP'
     $health = Invoke-RestMethod "$base/health"
     Assert ($health.storage -eq 'memory' -and $health.demo) 'Health reports temporary storage and browser test mode'
     Assert ((Invoke-WebRequest "$base/miniapp/" -SkipHttpErrorCheck).Content.Contains('APOLLO')) 'React entry is served'
     Assert ((Request '/me' @{}).StatusCode -eq 200) 'Test mode opens in browser without Telegram or demo headers'
+    Assert ((Invoke-WebRequest "$base/health/ready" -SkipHttpErrorCheck).StatusCode -eq 200) 'Readiness separately confirms usable storage'
+    $badRequest = Invoke-WebRequest "$base/api/app/breakdowns" -Method POST -Body '{broken' -ContentType 'application/json' -SkipHttpErrorCheck
+    Assert ($badRequest.StatusCode -eq 400) 'Malformed request is rejected without killing the server'
+    Assert ((Invoke-WebRequest "$base/health").StatusCode -eq 200) 'HTTP server remains alive after a request error'
     Assert ((Request '/admin/notifications' $operator).StatusCode -eq 403) 'Operator cannot access administration'
     $options = (Request '/options' $operator).Content | ConvertFrom-Json
     Assert ($options.Count -eq 176) 'Workbook and repair choices loaded'

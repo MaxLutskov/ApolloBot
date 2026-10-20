@@ -4,10 +4,11 @@ using Microsoft.EntityFrameworkCore;
 
 namespace ApolloBreakdowns.Telegram;
 
-public sealed class TelegramWorker(IServiceScopeFactory scopes, IConfiguration config, ILogger<TelegramWorker> logger) : BackgroundService
+public sealed class TelegramWorker(IServiceScopeFactory scopes, IConfiguration config, ILogger<TelegramWorker> logger, StorageRuntime storage) : ResilientBackgroundService(logger)
 {
-    protected override async Task ExecuteAsync(CancellationToken ct)
+    protected override async Task RunAsync(CancellationToken ct)
     {
+        await storage.WaitAsync(ct);
         var mode = config["Telegram:Mode"];
         if (mode == "Demo") return;
         var initialized = false;
@@ -44,10 +45,11 @@ public sealed class TelegramWorker(IServiceScopeFactory scopes, IConfiguration c
     }
 }
 
-public sealed class NotificationWorker(IServiceScopeFactory scopes, IConfiguration config, ILogger<NotificationWorker> logger) : BackgroundService
+public sealed class NotificationWorker(IServiceScopeFactory scopes, IConfiguration config, ILogger<NotificationWorker> logger, StorageRuntime storage) : ResilientBackgroundService(logger)
 {
-    protected override async Task ExecuteAsync(CancellationToken ct)
+    protected override async Task RunAsync(CancellationToken ct)
     {
+        await storage.WaitAsync(ct);
         if (config["Telegram:Mode"] == "Demo") return;
         while (!ct.IsCancellationRequested)
         {

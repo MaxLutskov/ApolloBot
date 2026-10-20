@@ -5,7 +5,7 @@ public static class StartupSettings
     public static string Normalize(IConfiguration config)
     {
         var mode = config["Telegram:Mode"] ?? "Webhook";
-        if (config.GetValue<bool>("App:TestMode") || string.IsNullOrWhiteSpace(config["Telegram:BotToken"]) || mode == "Demo")
+        if ((bool.TryParse(config["App:TestMode"], out var testMode) && testMode) || string.IsNullOrWhiteSpace(config["Telegram:BotToken"]) || mode == "Demo")
             mode = "Demo";
         else
         {

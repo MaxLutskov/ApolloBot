@@ -1,3 +1,7 @@
+using ApolloBreakdowns;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging.Abstractions;
 using System.Net;
 using System.Security.Cryptography;
 using System.Text;
@@ -26,6 +30,22 @@ minimalSettings["Telegram:WebhookSecret"] = "";
 Check(ApolloBreakdowns.StartupSettings.Normalize(minimalSettings) == "Polling", "Missing webhook secret falls back to polling");
 minimalSettings["App:TestMode"] = "true";
 Check(ApolloBreakdowns.StartupSettings.Normalize(minimalSettings) == "Demo", "Explicit test mode overrides configured Telegram");
+var invalidBoolean = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> {
+    ["App:TestMode"] = "mistyped", ["Telegram:BotToken"] = "token"
+}).Build();
+Check(StartupSettings.Normalize(invalidBoolean) == "Polling", "Malformed optional test flag does not crash startup");
+var probe = new FailureProbe();
+var hostBuilder = Host.CreateApplicationBuilder();
+hostBuilder.Services.AddHostedService(_ => probe);
+using (var host = hostBuilder.Build())
+{
+    await host.StartAsync();
+    await probe.Recovered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+    Check(probe.Attempts == 2 && !host.Services.GetRequiredService<IHostApplicationLifetime>().ApplicationStopping.IsCancellationRequested,
+        "Unexpected background failure is retried and does not stop the host");
+    await host.StopAsync();
+    Check(probe.ExecuteTask!.IsCompletedSuccessfully, "Background shutdown cancellation completes cleanly");
+}
 var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> {
     ["Telegram:Mode"] = "Demo", ["Telegram:GroupChatId"] = "-100123456", ["Telegram:BotToken"] = "test-token"
 }).Build();
@@ -124,5 +144,18 @@ sealed class RecordingHandler : HttpMessageHandler
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct) {
         Calls.Add((request.RequestUri!.Segments.Last(), await request.Content!.ReadAsStringAsync(ct)));
         return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("{\"ok\":true,\"result\":true}", Encoding.UTF8, "application/json") };
+    }
+}
+
+sealed class FailureProbe() : ResilientBackgroundService(NullLogger.Instance)
+{
+    public int Attempts;
+    public TaskCompletionSource Recovered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    protected override TimeSpan RetryDelay => TimeSpan.FromMilliseconds(20);
+    protected override async Task RunAsync(CancellationToken ct)
+    {
+        if (Interlocked.Increment(ref Attempts) == 1) throw new InvalidOperationException("Simulated integration outage");
+        Recovered.TrySetResult();
+        await Task.Delay(Timeout.InfiniteTimeSpan, ct);
     }
 }

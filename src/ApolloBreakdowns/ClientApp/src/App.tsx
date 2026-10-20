@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { api, type Option, type User } from './api'
+import { api, ApiError, type Option, type User } from './api'
 import ReportForm from './ReportForm'
 import History from './History'
 import Catalog from './Catalog'
@@ -10,16 +10,22 @@ export default function App() {
   const [tab, setTab] = useState('form')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
+  const [retry, setRetry] = useState(false)
   const loadOptions = useCallback(async () => { setOptions(await api<Option[]>('/options')) }, [])
   const load = useCallback(async () => {
-    setLoading(true); setError('')
+    setLoading(true); setError(''); setRetry(false)
     try {
       const [user, catalog] = await Promise.all([api<{ user: User; demo: boolean; temporaryStorage: boolean }>('/me'), api<Option[]>('/options')])
       setMe(user); setOptions(catalog)
-    } catch (e) { setError((e as Error).message) }
+    } catch (e) { setError((e as Error).message); setRetry(e instanceof ApiError && e.status === 503) }
     finally { setLoading(false) }
   }, [])
   useEffect(() => { window.Telegram?.WebApp.ready(); window.Telegram?.WebApp.expand(); void load() }, [load])
+  useEffect(() => {
+    if (!retry || loading) return
+    const timer = window.setTimeout(() => void load(), 3000)
+    return () => window.clearTimeout(timer)
+  }, [retry, loading, load])
 
   return <div className="app-shell">
     <header className="topbar"><div className="brand"><span className="brand-mark">A<span>•</span></span><div>APOLLO<small>СЕРВІСНИЙ ЖУРНАЛ</small></div></div><span className="topbar-meta">{me?.user.isAdmin ? 'Адміністратор' : 'Облік обладнання'}</span></header>
