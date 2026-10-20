@@ -12,6 +12,9 @@ public sealed class FieldOption
     public bool Active { get; set; } = true;
     public bool RequiresDescription { get; set; }
     public bool RequiresReserve { get; set; }
+    public bool RequiresRepairStart { get; set; }
+    public bool IsOther { get; set; }
+    public bool Deleted { get; set; }
     public int SortOrder { get; set; }
     public Guid Version { get; set; } = Guid.NewGuid();
 }
@@ -34,6 +37,9 @@ public sealed class Breakdown
     public string Description { get; set; } = "";
     public string RepairMethod { get; set; } = "";
     public bool? HasReserveApollo { get; set; }
+    public bool RequiresRepairStart { get; set; }
+    public DateTimeOffset? RepairStartedAt { get; set; }
+    public long? RepairStartedByUserId { get; set; }
     public DateTimeOffset? RestoredAt { get; set; }
     public long? RestoredByUserId { get; set; }
     public Guid Version { get; set; } = Guid.NewGuid();
@@ -72,6 +78,40 @@ public sealed class BotState
     public bool CatalogSeeded { get; set; }
 }
 
+public sealed class BotUser
+{
+    public long Id { get; set; }
+    public string Name { get; set; } = "";
+    public bool IsAdmin { get; set; }
+    public bool RoleInitialized { get; set; }
+    public DateTimeOffset FirstSeenAt { get; set; } = DateTimeOffset.UtcNow;
+    public DateTimeOffset LastSeenAt { get; set; } = DateTimeOffset.UtcNow;
+    public Guid Version { get; set; } = Guid.NewGuid();
+}
+
+public sealed class ReminderSchedule
+{
+    public int Id { get; set; }
+    public string Time { get; set; } = "07:00";
+    public bool Active { get; set; } = true;
+    public bool Deleted { get; set; }
+    public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+    public Guid Version { get; set; } = Guid.NewGuid();
+}
+
+public sealed class ReminderDelivery
+{
+    public int Id { get; set; }
+    public int ScheduleId { get; set; }
+    public string LocalDate { get; set; } = "";
+    public long ChatId { get; set; }
+    public string Text { get; set; } = "";
+    public DateTimeOffset NextAttemptAt { get; set; } = DateTimeOffset.UtcNow;
+    public DateTimeOffset? SentAt { get; set; }
+    public int Attempts { get; set; }
+    public Guid Version { get; set; } = Guid.NewGuid();
+}
+
 public sealed class ApolloDbContext(DbContextOptions<ApolloDbContext> options) : DbContext(options)
 {
     public const string Schema = "apollo";
@@ -81,9 +121,29 @@ public sealed class ApolloDbContext(DbContextOptions<ApolloDbContext> options) :
     public DbSet<AuditEntry> Audit => Set<AuditEntry>();
     public DbSet<BotState> BotStates => Set<BotState>();
 
+    public DbSet<BotUser> Users => Set<BotUser>();
+    public DbSet<ReminderSchedule> Reminders => Set<ReminderSchedule>();
+    public DbSet<ReminderDelivery> ReminderDeliveries => Set<ReminderDelivery>();
+
     protected override void OnModelCreating(ModelBuilder b)
     {
         b.HasDefaultSchema(Schema);
+        b.Entity<BotUser>(e => {
+            e.Property(x => x.Id).ValueGeneratedNever();
+            e.Property(x => x.Name).HasMaxLength(300);
+            e.Property(x => x.Version).IsConcurrencyToken();
+        });
+        b.Entity<ReminderSchedule>(e => {
+            e.Property(x => x.Time).HasMaxLength(5);
+            e.Property(x => x.Version).IsConcurrencyToken();
+        });
+        b.Entity<ReminderDelivery>(e => {
+            e.Property(x => x.LocalDate).HasMaxLength(10);
+            e.Property(x => x.Text).HasMaxLength(4000);
+            e.Property(x => x.Version).IsConcurrencyToken();
+            e.HasIndex(x => new { x.ScheduleId, x.LocalDate }).IsUnique();
+            e.HasOne<ReminderSchedule>().WithMany().HasForeignKey(x => x.ScheduleId).OnDelete(DeleteBehavior.Restrict);
+        });
         b.Entity<BotState>().Property(x => x.Id).ValueGeneratedNever();
         b.Entity<FieldOption>(e => {
             e.Property(x => x.Kind).HasMaxLength(20);

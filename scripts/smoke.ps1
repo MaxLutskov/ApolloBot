@@ -47,7 +47,7 @@ try {
     Assert ((Invoke-WebRequest "$base/health").StatusCode -eq 200) 'HTTP server remains alive after a request error'
     Assert ((Request '/admin/notifications' $operator).StatusCode -eq 403) 'Operator cannot access administration'
     $options = (Request '/options' $operator).Content | ConvertFrom-Json
-    Assert ($options.Count -eq 176) 'Workbook and repair choices loaded'
+    Assert ($options.Count -ge 176) 'Workbook and repair choices loaded'
     $part = $options | Where-Object { $_.kind -eq 'part' -and -not $_.requiresDescription } | Select-Object -First 1
     $node = $options | Where-Object { $_.kind -eq 'node' -and $_.parentId -eq $part.id } | Select-Object -First 1
     $fault = $options | Where-Object { $_.kind -eq 'fault' -and $_.parentId -eq $node.id -and -not $_.requiresDescription } | Select-Object -First 1
@@ -57,7 +57,7 @@ try {
         shiftId = ($options | Where-Object kind -eq 'shift' | Select-Object -First 1).id
         machineId = ($options | Where-Object kind -eq 'machine' | Select-Object -First 1).id
         partId = $part.id; nodeId = $node.id; faultId = $fault.id
-        repairMethodId = ($options | Where-Object { $_.kind -eq 'repairMethod' -and $_.requiresReserve } | Select-Object -First 1).id
+        repairMethodId = ($options | Where-Object { $_.kind -eq 'repairMethod' -and $_.requiresReserve -and $_.requiresRepairStart } | Select-Object -First 1).id
         hasReserveApollo = $null
     }
     Assert ((Request '/breakdowns' $operator 'POST' $body).StatusCode -eq 400) 'Reserve answer is mandatory for involvement'
@@ -71,8 +71,13 @@ try {
     Assert ($own.total -eq 1 -and $null -eq $own.items[0].restoredAt -and $own.items[0].hasReserveApollo -eq $false) 'Open report visible with reserve answer'
     $otherBody = $body.Clone(); $otherBody.requestId = [guid]::NewGuid().ToString()
     $other = (Request '/breakdowns' $admin 'POST' $otherBody).Content | ConvertFrom-Json
-    Assert (((Request '/breakdowns' $operator).Content | ConvertFrom-Json).total -eq 1) 'Operator cannot see another user reports'
-    Assert ((Request "/breakdowns/$($other.id)/restore" $operator 'POST').StatusCode -eq 403) 'Operator cannot close another user report privately'
+    Assert (((Request '/breakdowns' $operator).Content | ConvertFrom-Json).total -eq 2) 'Every operator sees all reports'
+    Assert ((Request "/breakdowns/$($other.id)/restore" $operator 'POST').StatusCode -eq 409) 'Repair service cannot finish before starting repair'
+    Assert ((Request "/breakdowns/$($other.id)/start-repair" $operator 'POST').StatusCode -eq 200) 'Arriving worker can start another author report'
+    Assert ((Request "/breakdowns/$($other.id)/restore" $operator 'POST').StatusCode -eq 200) 'Worker can finish another author report'
+    $started = (Request "/breakdowns/$($report.id)/start-repair" $admin 'POST').Content | ConvertFrom-Json
+    $startedAgain = (Request "/breakdowns/$($report.id)/start-repair" $admin 'POST').Content | ConvertFrom-Json
+    Assert ($started.repairStartedAt -eq $startedAgain.repairStartedAt) 'Repeated repair start preserves first arrival time'
     $closed = (Request "/breakdowns/$($report.id)/restore" $operator 'POST').Content | ConvertFrom-Json
     $again = (Request "/breakdowns/$($report.id)/restore" $operator 'POST').Content | ConvertFrom-Json
     Assert ($null -ne $closed.restoredAt -and $closed.restoredAt -eq $again.restoredAt) 'Restoration time is fixed and idempotent'
@@ -86,8 +91,34 @@ try {
     $activeOptions = (Request '/options' $operator).Content | ConvertFrom-Json
     Assert (-not ($activeOptions | Where-Object id -eq $added.id)) 'Disabled option hidden from operator'
     Assert (((Request '/admin/audit' $admin).Content | ConvertFrom-Json).Count -eq 2) 'Catalog changes audited'
-    $csv = Request '/admin/export' $admin
-    Assert ($csv.StatusCode -eq 200 -and $csv.Content.Contains('Простій, сек')) 'CSV contains automatic downtime'
+    $users = (Request '/admin/users' $admin).Content | ConvertFrom-Json
+    Assert ($users.Count -eq 2) 'Both browser visitors are recorded'
+    $registeredOperator = $users | Where-Object id -eq 2
+    Assert ((Request '/admin/users/2/admin' $admin 'PUT' @{ isAdmin = $true; version = $registeredOperator.version }).StatusCode -eq 200) 'Admin can promote an existing user'
+    Assert ((Request '/admin/notifications' $operator).StatusCode -eq 200) 'Granted admin rights work immediately'
+    $registeredOperator = (Request '/admin/users' $admin).Content | ConvertFrom-Json | Where-Object id -eq 2
+    Assert ((Request '/admin/users/2/admin' $admin 'PUT' @{ isAdmin = $false; version = $registeredOperator.version }).StatusCode -eq 200) 'Admin can revoke granted rights'
+    Assert ((Request '/admin/notifications' $operator).StatusCode -eq 403) 'Revoked rights cannot access admin API'
+    $r1 = (Request '/admin/reminders' $admin 'POST' @{ time = '07:00'; active = $true }).Content | ConvertFrom-Json
+    $r2 = (Request '/admin/reminders' $admin 'POST' @{ time = '12:00'; active = $true }).Content | ConvertFrom-Json
+    Assert (((Request '/admin/reminders' $admin).Content | ConvertFrom-Json).Count -eq 2) 'Multiple daily reminder times can be configured'
+    Assert ((Request '/admin/reminders' $operator 'POST' @{ time = '15:00'; active = $true }).StatusCode -eq 403) 'Operator cannot change reminders'
+    Assert ((Request '/admin/reminders' $admin 'POST' @{ time = '25:00'; active = $true }).StatusCode -eq 400) 'Invalid reminder time rejected'
+    Assert ((Request "/admin/reminders/$($r1.id)?version=$($r1.version)" $admin 'DELETE').StatusCode -eq 200) 'Reminder can be deleted'
+    $allOptions = (Request '/options' $admin).Content | ConvertFrom-Json
+    $updatedOption = $allOptions | Where-Object id -eq $added.id
+    Assert ((Request "/admin/options/$($added.id)?version=$($updatedOption.version)" $admin 'DELETE').StatusCode -eq 200) 'Catalog option can be deleted'
+    Assert (-not (((Request '/options' $admin).Content | ConvertFrom-Json) | Where-Object id -eq $added.id)) 'Deleted option disappears for admins too'
+    $newPart = (Request '/admin/options' $admin 'POST' @{ kind = 'part'; label = 'Тестова частина'; active = $true; requiresDescription = $false; requiresReserve = $false; sortOrder = 1 }).Content | ConvertFrom-Json
+    $allOptions = (Request '/options' $admin).Content | ConvertFrom-Json
+    $otherNode = $allOptions | Where-Object { $_.kind -eq 'node' -and $_.parentId -eq $newPart.id -and $_.isOther }
+    Assert ($null -ne $otherNode) 'New part automatically gets Other node'
+    Assert ($null -ne ($allOptions | Where-Object { $_.kind -eq 'fault' -and $_.parentId -eq $otherNode.id -and $_.isOther })) 'New Other node automatically gets Other fault'
+    Assert ((Request "/admin/options/$($newPart.id)?version=$($newPart.version)" $admin 'DELETE').StatusCode -eq 200) 'Deleting a parent deletes its children'
+    Assert (-not (((Request '/options' $admin).Content | ConvertFrom-Json) | Where-Object { $_.id -eq $newPart.id -or $_.parentId -eq $newPart.id -or $_.parentId -eq $otherNode.id })) 'Deleted subtree is hidden'
+    Assert (((Request '/breakdowns' $operator).Content | ConvertFrom-Json).total -eq 2) 'Catalog deletion does not delete reports'
+    $csv = Request '/export' $operator
+    Assert ($csv.StatusCode -eq 200 -and $csv.Content.Contains('Простій, сек') -and $csv.Content.Contains('Ремонт, сек')) 'CSV contains automatic downtime'
     Assert ((Invoke-WebRequest "$base/api/telegram/webhook" -Method POST -Body '{}' -ContentType 'application/json' -SkipHttpErrorCheck).StatusCode -eq 404) 'Demo webhook rejects Telegram callbacks'
     Write-Output 'All HTTP smoke checks passed.'
 } finally {

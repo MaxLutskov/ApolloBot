@@ -27,8 +27,6 @@ public sealed class TelegramAuth(IConfiguration config)
             TimeSpan.FromHours(config.GetValue("Telegram:InitDataMaxAgeHours", 24)));
         if (user is null) return null;
         var admins = config.GetSection("Admin:TelegramIds").Get<long[]>() ?? [];
-        var allowed = config.GetSection("Telegram:AllowedUserIds").Get<long[]>() ?? [];
-        if (allowed.Length > 0 && !allowed.Contains(user.Id) && !admins.Contains(user.Id)) return null;
         return user with { IsAdmin = admins.Contains(user.Id) };
     }
 

@@ -57,16 +57,16 @@ await db.Database.EnsureCreatedAsync();
 await CatalogSeed.ApplyAsync(db);
 var count = await db.Options.CountAsync();
 await CatalogSeed.ApplyAsync(db);
-Check(count == 176 && await db.Options.CountAsync() == count, "Workbook catalog imports once, 176 options");
+Check(count >= 176 && await db.Options.CountAsync() == count, "Workbook catalog and Other entries import idempotently");
 var expectedSites = Enumerable.Range(1, 14).Concat(new[] { 22, 42, 43, 47, 49 }).Select(n => $"ВДВП №{n}");
-Check((await db.Options.Where(x => x.Kind == "site" && x.Active).OrderBy(x => x.SortOrder).Select(x => x.Label).ToListAsync()).SequenceEqual(expectedSites), "Site list is exactly 1–14, 22, 42, 43, 47, 49");
+Check((await db.Options.Where(x => x.Kind == "site" && x.Active && !x.IsOther).OrderBy(x => x.SortOrder).Select(x => x.Label).ToListAsync()).SequenceEqual(expectedSites), "Site list is exactly 1–14, 22, 42, 43, 47, 49");
 var catalog = await db.Options.ToListAsync();
 int Id(string kind) => catalog.First(x => x.Kind == kind).Id;
 var part = catalog.First(x => x.Kind == "part" && x.Label == "Жатка");
 var node = catalog.First(x => x.Kind == "node" && x.ParentId == part.Id);
 var fault = catalog.First(x => x.Kind == "fault" && x.ParentId == node.Id && !x.RequiresDescription);
-var self = catalog.Single(x => x.Kind == "repairMethod" && !x.RequiresReserve);
-var assisted = catalog.First(x => x.Kind == "repairMethod" && x.RequiresReserve);
+var self = catalog.Single(x => x.Kind == "repairMethod" && !x.RequiresReserve && !x.IsOther);
+var assisted = catalog.First(x => x.Kind == "repairMethod" && x.RequiresReserve && x.RequiresRepairStart);
 var input = new SubmitBreakdown(Guid.NewGuid(), Id("site"), Id("shift"), "Тестовий працівник", Id("machine"), part.Id, node.Id, fault.Id, "", self.Id, null);
 var owner = new AppUser(22, "Автор", false);
 var other = new AppUser(33, "Учасник групи", false);
@@ -87,7 +87,7 @@ fault.Label = "Перейменована несправність"; await db.Sa
 Check(report.Fault != fault.Label, "Saved labels survive catalog renaming");
 fault.Active = false; await db.SaveChangesAsync();
 await Reject(() => service.SubmitAsync(input with { RequestId = Guid.NewGuid() }, owner, default), 409, "Disabled choices are rejected");
-await Reject(() => service.RestoreAsync(report.Id, other, default), 403, "Unrelated private user cannot stop downtime");
+await Reject(() => service.RestoreAsync(withReserve.Id, other, default), 409, "Repair service cannot close before arrival/start");
 report.CreatedAt = DateTimeOffset.UtcNow.AddMinutes(-15).AddSeconds(-10); await db.SaveChangesAsync();
 var closed = await service.RestoreAsync(report.Id, other, default, fromConfiguredGroup: true);
 Check(closed.RestoredAt is not null && closed.RestoredByUserId == other.Id, "Configured group member can restore work");
@@ -100,6 +100,8 @@ Check(BreakdownService.DowntimeSeconds(closed, DateTimeOffset.UtcNow.AddHours(2)
 // Stale DbContext simulates concurrent restore requests across Azure instances.
 await using var stale = new ApolloDbContext(options);
 await stale.Breakdowns.SingleAsync(x => x.Id == withReserve.Id);
+await service.StartRepairAsync(withReserve.Id, other, default);
+await stale.Entry(await stale.Breakdowns.SingleAsync(x => x.Id == withReserve.Id)).ReloadAsync();
 await service.RestoreAsync(withReserve.Id, owner, default);
 var fromStale = await new BreakdownService(stale, config).RestoreAsync(withReserve.Id, owner, default);
 Check(fromStale.RestoredAt == withReserve.RestoredAt && await db.Notifications.CountAsync(x => x.BreakdownId == withReserve.Id && x.Kind == "restored") == 2, "Optimistic concurrency preserves first closure and one completion event");
@@ -124,7 +126,7 @@ Check(Endpoints.Csv(" =SUM(A1)").StartsWith("\"'"), "CSV formula injection escap
 
 // Exercise real Bot API payloads against a recording transport; no Telegram messages sent.
 var handler = new RecordingHandler();
-var telegram = new TelegramClient(new HttpClient(handler), config, service);
+var telegram = new TelegramClient(new HttpClient(handler), config, service, new UserDirectory(db, config));
 await telegram.SendNotificationAsync(-100123456, "Тест", report.Id, true, default);
 Check(handler.Calls.Last().Json.Contains("restore:" + report.Id) && handler.Calls.Last().Method == "sendMessage", "Group notification carries report-specific restore button");
 fault.Active = true; await db.SaveChangesAsync();
@@ -136,6 +138,63 @@ using var update = JsonDocument.Parse(JsonSerializer.Serialize(new { callback_qu
 await telegram.HandleUpdateAsync(update.RootElement, default);
 Check(callbackReport.RestoredAt is not null && handler.Calls.Any(x => x.Method == "answerCallbackQuery"), "Group callback closes report and acknowledges button");
 Check(handler.Calls.Any(x => x.Method == "editMessageReplyMarkup"), "Callback removes completed button");
+// New roles are persisted independently of environment settings.
+var directory = new UserDirectory(db, config);
+var adminUser = await directory.VisitAsync(new AppUser(100, "Адмін", true), default);
+var registered = await directory.VisitAsync(new AppUser(101, "Працівник", false), default);
+Check(await db.Users.AnyAsync(x => x.Id == 101 && !x.IsAdmin), "Bot visitors are stored with first and last activity");
+var profile = await db.Users.FindAsync(101L);
+await directory.SetAdminAsync(101, true, profile!.Version, adminUser, default);
+Check((await directory.VisitAsync(registered, default)).IsAdmin, "Existing visitor receives admin rights immediately");
+await Reject(async () => await directory.SetAdminAsync(100, false, (await db.Users.FindAsync(100L))!.Version, adminUser, default), 400, "Admin cannot revoke their own role");
+await directory.SetAdminAsync(101, false, profile.Version, adminUser, default);
+Check(!(await directory.VisitAsync(registered with { IsAdmin = true }, default)).IsAdmin, "Revoked role is not restored from stale identity claims");
+Check(await db.Options.Where(x => !x.Deleted && x.Kind == "part").AllAsync(p => db.Options.Any(n => n.ParentId == p.Id && n.IsOther && n.Kind == "node")), "Every equipment part has Other child");
+Check(await db.Options.Where(x => !x.Deleted && x.Kind == "node").AllAsync(n => db.Options.Any(f => f.ParentId == n.Id && f.IsOther && f.Kind == "fault")), "Every node has Other fault");
+Check(await db.Notifications.Where(x => x.ChatId > 0).AllAsync(x => x.Text == "Заявка прийнята." || x.Text == "Роботу відновлено."), "Private bot messages contain only brief confirmations");
+var repairReport = await service.SubmitAsync(input with { RequestId = Guid.NewGuid(), RepairMethodId = assisted.Id, HasReserveApollo = true }, owner, default);
+repairReport.CreatedAt = DateTimeOffset.UtcNow.AddMinutes(-20);
+await db.SaveChangesAsync();
+await service.StartRepairAsync(repairReport.Id, other, default);
+var repairStarted = repairReport.RepairStartedAt;
+await service.StartRepairAsync(repairReport.Id, owner, default);
+Check(repairReport.RepairStartedAt == repairStarted && await db.Notifications.CountAsync(x => x.BreakdownId == repairReport.Id && x.Kind == "repairStarted") == 1, "Repair start is idempotent and queues only a group message");
+repairReport.RepairStartedAt = DateTimeOffset.UtcNow.AddMinutes(-5);
+await db.SaveChangesAsync();
+await service.RestoreAsync(repairReport.Id, other, default);
+Check(BreakdownService.DowntimeSeconds(repairReport, DateTimeOffset.UtcNow) >= 1200 && BreakdownService.RepairSeconds(repairReport, DateTimeOffset.UtcNow) is >= 300 and < 310, "Total downtime includes travel while repair time excludes it");
+Check(BreakdownService.RepairSeconds(repairReport, DateTimeOffset.UtcNow.AddDays(1)) == BreakdownService.RepairSeconds(repairReport, DateTimeOffset.UtcNow), "Finished repair duration no longer grows");
+await telegram.SendNotificationAsync(-100123456, "Ремонт", repairReport.Id, true, default, true);
+Check(handler.Calls.Last().Json.Contains("start:"), "Service report gets Start repair Telegram button");
+await telegram.SendNotificationAsync(22, "Заявка прийнята.", repairReport.Id, true, default);
+Check(!handler.Calls.Last().Json.Contains("reply_markup"), "Private confirmations contain no workflow buttons");
+await telegram.SendDocumentAsync(22, await HistoryExport.BuildAsync(db, default), default);
+Check(handler.Calls.Last().Method == "sendDocument" && handler.Calls.Last().Json.Contains("Apollo-history.csv"), "CSV is sent as an actual Telegram document");
+var csvBytes = await HistoryExport.BuildAsync(db, default);
+Check(csvBytes.Take(3).SequenceEqual(new byte[] { 239, 187, 191 }) && Encoding.UTF8.GetString(csvBytes).Contains("Ремонт, сек"), "CSV includes UTF-8 BOM and separate repair duration");
+var reminderService = new ReminderService(db, config);
+var morning = new DateTimeOffset(2026, 10, 20, 4, 0, 0, TimeSpan.Zero); // 07:00 Kyiv.
+db.Reminders.AddRange(new ReminderSchedule { Time = "07:00" }, new ReminderSchedule { Time = "12:00" });
+await db.SaveChangesAsync();
+await reminderService.QueueDueAsync(morning, default);
+Check(!await db.ReminderDeliveries.AnyAsync(), "No reminder is queued when all reports are completed");
+var pendingReport = await service.SubmitAsync(input with { RequestId = Guid.NewGuid() }, owner, default);
+await reminderService.QueueDueAsync(morning, default);
+await reminderService.QueueDueAsync(morning.AddMinutes(1), default);
+Check(await db.ReminderDeliveries.CountAsync() == 1 && (await db.ReminderDeliveries.SingleAsync()).Text.Contains("#" + pendingReport.Id), "Reminder contains open reports and runs once per schedule/day");
+await reminderService.QueueDueAsync(morning.AddHours(5), default);
+Check(await db.ReminderDeliveries.CountAsync() == 2, "Second daily reminder uses its own delivery key");
+await service.RestoreAsync(pendingReport.Id, other, default);
+Check(await reminderService.BuildTextAsync(morning, default) is null, "Reminder retry suppresses messages after all reports are resolved");
+
+var memoryOptions = new DbContextOptionsBuilder<ApolloDbContext>().UseInMemoryDatabase("parallel-visits-" + Guid.NewGuid()).Options;
+await Task.WhenAll(Enumerable.Range(0, 8).Select(async _ => {
+    await using var visitDb = new ApolloDbContext(memoryOptions);
+    await new UserDirectory(visitDb, config).VisitAsync(new AppUser(999, "Паралельний вхід", false), default);
+}));
+await using (var visitDb = new ApolloDbContext(memoryOptions))
+    Check(await visitDb.Users.CountAsync() == 1, "Parallel initial form requests register a single visitor without errors");
+Check(JsonSerializer.Serialize(TelegramClient.Keyboard(1, true), new JsonSerializerOptions { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping }).Contains("Почато ремонт"), "Telegram button labels preserve Ukrainian encoding");
 Console.WriteLine($"{passed} checks passed.");
 
 sealed class RecordingHandler : HttpMessageHandler

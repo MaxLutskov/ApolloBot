@@ -25,6 +25,9 @@ builder.Services.AddDbContext<ApolloDbContext>(options => {
 });
 builder.Services.AddScoped<TelegramAuth>();
 builder.Services.AddScoped<BreakdownService>();
+builder.Services.AddScoped<UserDirectory>();
+builder.Services.AddScoped<ReminderService>();
+builder.Services.AddHostedService<ReminderWorker>();
 builder.Services.AddHttpClient<TelegramClient>(http => http.Timeout = TimeSpan.FromSeconds(40)).RemoveAllLoggers();
 builder.Services.AddHostedService<TelegramWorker>();
 builder.Services.AddHostedService<NotificationWorker>();
@@ -65,6 +68,9 @@ app.Use(async (ctx, next) => {
         }
         var user = ctx.RequestServices.GetRequiredService<TelegramAuth>().Authenticate(ctx.Request);
         if (user is null) { ctx.Response.StatusCode = 401; await ctx.Response.WriteAsJsonAsync(new { message = "Відкрийте форму через Telegram-бота. Якщо сесія закінчилася, закрийте й відкрийте форму знову." }); return; }
+        user = await ctx.RequestServices.GetRequiredService<UserDirectory>().VisitAsync(user, ctx.RequestAborted);
+        var allowed = builder.Configuration.GetSection("Telegram:AllowedUserIds").Get<long[]>() ?? [];
+        if (allowed.Length > 0 && !allowed.Contains(user.Id) && !user.IsAdmin) { ctx.Response.StatusCode = 403; return; }
         ctx.Items["User"] = user;
     }
     await next();

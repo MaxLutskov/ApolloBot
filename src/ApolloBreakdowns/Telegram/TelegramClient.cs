@@ -5,7 +5,7 @@ using ApolloBreakdowns.Domain;
 namespace ApolloBreakdowns.Telegram;
 
 // Based on VPF_Algorithm_Bot/Telegram/TelegramClient.cs. No bot token is logged.
-public sealed class TelegramClient(HttpClient http, IConfiguration config, BreakdownService breakdowns)
+public sealed class TelegramClient(HttpClient http, IConfiguration config, BreakdownService breakdowns, UserDirectory users)
 {
     public async Task<JsonElement> CallAsync(string method, object payload, CancellationToken ct)
     {
@@ -19,21 +19,41 @@ public sealed class TelegramClient(HttpClient http, IConfiguration config, Break
 
     public Task<JsonElement> SendAsync(long chatId, string text, CancellationToken ct) => CallAsync("sendMessage", new { chat_id = chatId, text }, ct);
 
-    public Task<JsonElement> SendNotificationAsync(long chatId, string text, int reportId, bool showRestore, CancellationToken ct) =>
-        showRestore ? CallAsync("sendMessage", new { chat_id = chatId, text = $"Заявка №{reportId}\n{text}",
-            reply_markup = new { inline_keyboard = new[] { new[] { new { text = "Роботу відновлено", callback_data = $"restore:{reportId}" } } } } }, ct)
+    public Task<JsonElement> SendNotificationAsync(long chatId, string text, int reportId, bool showRestore, CancellationToken ct, bool startRepair = false) =>
+        showRestore && chatId < 0 ? CallAsync("sendMessage", new { chat_id = chatId, text = $"Заявка №{reportId}\n{text}",
+            reply_markup = Keyboard(reportId, startRepair) }, ct)
         : SendAsync(chatId, text, ct);
+
+    public static object Keyboard(int reportId, bool startRepair) => new { inline_keyboard = new[] { new[] { new {
+        text = startRepair ? "🔧 Почато ремонт" : "✅ Проблему вирішено", callback_data = $"{(startRepair ? "start" : "restore")}:{reportId}"
+    } } } };
+
+    public async Task SendDocumentAsync(long chatId, byte[] bytes, CancellationToken ct)
+    {
+        using var content = new MultipartFormDataContent();
+        content.Add(new StringContent(chatId.ToString(System.Globalization.CultureInfo.InvariantCulture)), "chat_id");
+        var document = new ByteArrayContent(bytes);
+        document.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("text/csv");
+        content.Add(document, "document", "Apollo-history.csv");
+        using var response = await http.PostAsync($"https://api.telegram.org/bot{config["Telegram:BotToken"]}/sendDocument", content, ct);
+        if (!response.IsSuccessStatusCode) throw new TelegramException((int)response.StatusCode);
+        using var result = await response.Content.ReadFromJsonAsync<JsonDocument>(cancellationToken: ct);
+        if (result?.RootElement.GetProperty("ok").GetBoolean() != true) throw new TelegramException(502);
+    }
 
     public async Task HandleUpdateAsync(JsonElement update, CancellationToken ct)
     {
         if (update.TryGetProperty("callback_query", out var callback)) {
             await HandleCallbackAsync(callback, ct); return;
         }
+        if (update.TryGetProperty("message", out var incoming) && incoming.TryGetProperty("from", out var visitor) &&
+            !(visitor.TryGetProperty("is_bot", out var bot) && bot.GetBoolean()))
+            await users.VisitTelegramAsync(visitor.GetProperty("id").GetInt64(), TelegramName(visitor), ct);
         if (!update.TryGetProperty("message", out var message) || !message.TryGetProperty("text", out var text) ||
             !message.TryGetProperty("chat", out var chat)) return;
         var command = text.GetString()?.Split(' ', '@')[0];
         if (command == "/chatid" && message.TryGetProperty("from", out var sender) &&
-            (config.GetSection("Admin:TelegramIds").Get<long[]>() ?? []).Contains(sender.GetProperty("id").GetInt64())) {
+            (await users.VisitTelegramAsync(sender.GetProperty("id").GetInt64(), TelegramName(sender), ct)).IsAdmin) {
             await SendAsync(chat.GetProperty("id").GetInt64(), $"Chat ID: {chat.GetProperty("id").GetInt64()}", ct); return;
         }
         if (chat.GetProperty("type").GetString() != "private") return;
@@ -52,26 +72,31 @@ public sealed class TelegramClient(HttpClient http, IConfiguration config, Break
         }, ct);
     }
 
+    private static string TelegramName(JsonElement user) => string.Join(' ', new[] { "first_name", "last_name" }
+        .Select(key => user.TryGetProperty(key, out var name) ? name.GetString() : null).Where(x => !string.IsNullOrWhiteSpace(x)));
+
     private async Task HandleCallbackAsync(JsonElement callback, CancellationToken ct)
     {
         var callbackId = callback.GetProperty("id").GetString()!;
         var text = "Невідома дія.";
         try {
             var data = callback.TryGetProperty("data", out var d) ? d.GetString() : null;
-            if (data?.StartsWith("restore:", StringComparison.Ordinal) != true || !int.TryParse(data[8..], out var reportId)) return;
+            var parts = data?.Split(':');
+            if (parts is not { Length: 2 } || parts[0] is not ("restore" or "start") || !int.TryParse(parts[1], out var reportId)) return;
+            var start = parts[0] == "start";
             var from = callback.GetProperty("from");
             var userId = from.GetProperty("id").GetInt64();
             if (userId <= 0 || from.TryGetProperty("is_bot", out var isBot) && isBot.GetBoolean()) return;
-            var admins = config.GetSection("Admin:TelegramIds").Get<long[]>() ?? [];
-            var name = from.TryGetProperty("first_name", out var n) ? n.GetString() ?? userId.ToString() : userId.ToString();
-            var group = config.GetValue<long>("Telegram:GroupChatId");
+            var actor = await users.VisitTelegramAsync(userId, TelegramName(from), ct);
+            var allowed = config.GetSection("Telegram:AllowedUserIds").Get<long[]>() ?? [];
+            if (allowed.Length > 0 && !allowed.Contains(userId) && !actor.IsAdmin) throw new RuleException("Немає доступу.", 403);
             var hasMessage = callback.TryGetProperty("message", out var message);
             var chatId = hasMessage ? message.GetProperty("chat").GetProperty("id").GetInt64() : 0;
-            var report = await breakdowns.RestoreAsync(reportId, new AppUser(userId, name, admins.Contains(userId)), ct, group < 0 && chatId == group);
-            text = $"Роботу відновлено. Простій: {BreakdownService.FormatDuration(BreakdownService.DowntimeSeconds(report, DateTimeOffset.UtcNow))}.";
+            var report = start ? await breakdowns.StartRepairAsync(reportId, actor, ct) : await breakdowns.RestoreAsync(reportId, actor, ct);
+            text = start ? "Початок ремонту зафіксовано." : $"Роботу відновлено. Простій: {BreakdownService.FormatDuration(BreakdownService.DowntimeSeconds(report, DateTimeOffset.UtcNow))}.";
             if (hasMessage) {
                 // Removing a button is best effort; database idempotency remains authoritative.
-                try { await CallAsync("editMessageReplyMarkup", new { chat_id = chatId, message_id = message.GetProperty("message_id").GetInt32(), reply_markup = new { inline_keyboard = Array.Empty<object>() } }, ct); }
+                try { await CallAsync("editMessageReplyMarkup", new { chat_id = chatId, message_id = message.GetProperty("message_id").GetInt32(), reply_markup = report.RestoredAt is null ? Keyboard(reportId, report.RequiresRepairStart && report.RepairStartedAt is null) : (object)new { inline_keyboard = Array.Empty<object>() } }, ct); }
                 catch (TelegramException) { }
             }
         }
