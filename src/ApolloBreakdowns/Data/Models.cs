@@ -128,6 +128,32 @@ public sealed class ApolloDbContext(DbContextOptions<ApolloDbContext> options) :
     public DbSet<ReminderSchedule> Reminders => Set<ReminderSchedule>();
     public DbSet<ReminderDelivery> ReminderDeliveries => Set<ReminderDelivery>();
 
+    public override int SaveChanges(bool acceptAllChangesOnSuccess)
+    {
+        NormalizeTimestampOffsets();
+        return base.SaveChanges(acceptAllChangesOnSuccess);
+    }
+
+    public override Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
+    {
+        NormalizeTimestampOffsets();
+        return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+    }
+
+    private void NormalizeTimestampOffsets()
+    {
+        // datetimeoffset retains the Kyiv offset while keeping the same instant for comparisons and durations.
+        foreach (var entry in ChangeTracker.Entries().Where(x => x.State is EntityState.Added or EntityState.Modified).ToList())
+        foreach (var property in entry.Properties)
+        {
+            if (property.CurrentValue is not DateTimeOffset instant) continue;
+            var local = ApplicationTime.InKyiv(instant);
+            if (instant.Offset == local.Offset) continue;
+            property.CurrentValue = local;
+            if (entry.State == EntityState.Modified) property.IsModified = true;
+        }
+    }
+
     protected override void OnModelCreating(ModelBuilder b)
     {
         b.HasDefaultSchema(Schema);

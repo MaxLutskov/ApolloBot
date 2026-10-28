@@ -7,7 +7,7 @@ namespace ApolloBreakdowns.Domain;
 
 public sealed class ReminderService(ApolloDbContext db, IConfiguration config)
 {
-    public static readonly TimeZoneInfo Kyiv = TimeZoneInfo.FindSystemTimeZoneById("Europe/Kyiv");
+    public static readonly TimeZoneInfo Kyiv = ApplicationTime.Kyiv;
     public static bool ValidTime(string time) => TimeOnly.TryParseExact(time, "HH:mm", CultureInfo.InvariantCulture, DateTimeStyles.None, out _);
 
     public async Task QueueDueAsync(DateTimeOffset now, CancellationToken ct)

@@ -224,6 +224,20 @@ var localCsv = Encoding.UTF8.GetString(await HistoryExport.BuildAsync(db, defaul
 Check(localCsv.Contains("Зареєстровано (Київ)") && localCsv.Contains("Почато ремонт (Київ)") && localCsv.Contains("Відновлено (Київ)") && !localCsv.Contains("(UTC)"), "CSV date columns explicitly identify Kyiv time");
 Check(localCsv.Contains("15.01.2026 12:00:00") && localCsv.Contains("15.01.2026 12:30:00") && localCsv.Contains("15.01.2026 13:30:00"), "CSV converts all report timestamps to Kyiv winter time (UTC+2)");
 Check(localCsv.Contains("15.07.2026 13:00:00") && localCsv.Contains("15.07.2026 13:30:00") && localCsv.Contains("15.07.2026 14:30:00"), "CSV converts all report timestamps to Kyiv summer time (UTC+3)");
+var storedWinter = await db.Breakdowns.AsNoTracking().SingleAsync(x => x.Machine == "TZ-WINTER");
+var storedSummer = await db.Breakdowns.AsNoTracking().SingleAsync(x => x.Machine == "TZ-SUMMER");
+Check(storedWinter.CreatedAt.Offset == TimeSpan.FromHours(2) && storedWinter.RepairStartedAt!.Value.Offset == TimeSpan.FromHours(2) && storedWinter.RestoredAt!.Value.Offset == TimeSpan.FromHours(2), "Database stores report timestamps with the Kyiv winter offset");
+Check(storedSummer.CreatedAt.Offset == TimeSpan.FromHours(3) && storedSummer.RepairStartedAt!.Value.Offset == TimeSpan.FromHours(3) && storedSummer.RestoredAt!.Value.Offset == TimeSpan.FromHours(3), "Database stores report timestamps with the Kyiv summer offset");
+Check(storedWinter.CreatedAt.UtcDateTime == new DateTime(2026, 1, 15, 10, 0, 0, DateTimeKind.Utc) && BreakdownService.DowntimeSeconds(storedWinter, now) == 5400, "Offset conversion preserves the exact instant and downtime");
+var localProfile = new BotUser { Id = 777, Name = "Часовий пояс", FirstSeenAt = new DateTimeOffset(2026, 1, 15, 10, 0, 0, TimeSpan.Zero), LastSeenAt = new DateTimeOffset(2026, 7, 15, 10, 0, 0, TimeSpan.Zero) };
+db.Users.Add(localProfile); db.SaveChanges();
+var storedProfile = await db.Users.AsNoTracking().SingleAsync(x => x.Id == 777);
+Check(storedProfile.FirstSeenAt.Offset == TimeSpan.FromHours(2) && storedProfile.LastSeenAt.Offset == TimeSpan.FromHours(3), "Synchronous saving also stores Kyiv offsets for user activity");
+localProfile.LastSeenAt = new DateTimeOffset(2026, 1, 16, 11, 0, 0, TimeSpan.Zero);
+await db.SaveChangesAsync();
+Check((await db.Users.AsNoTracking().SingleAsync(x => x.Id == 777)).LastSeenAt.Offset == TimeSpan.FromHours(2), "Updated timestamps are normalized to Kyiv on subsequent saves");
+var autumn = new Breakdown { CreatedAt = ApplicationTime.InKyiv(new DateTimeOffset(2026, 10, 25, 0, 30, 0, TimeSpan.Zero)), RestoredAt = ApplicationTime.InKyiv(new DateTimeOffset(2026, 10, 25, 1, 30, 0, TimeSpan.Zero)) };
+Check(autumn.CreatedAt.Hour == autumn.RestoredAt.Value.Hour && BreakdownService.DowntimeSeconds(autumn, now) == 3600, "Downtime remains correct across the autumn clock change");
 Console.WriteLine($"{passed} checks passed.");
 
 sealed class RecordingHandler : HttpMessageHandler

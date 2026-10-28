@@ -7,9 +7,8 @@ namespace ApolloBreakdowns.Domain;
 
 public static class HistoryExport
 {
-    private static readonly TimeZoneInfo Kyiv = TimeZoneInfo.FindSystemTimeZoneById("Europe/Kyiv");
     private static string LocalTime(DateTimeOffset? value) => value is null ? "" :
-        TimeZoneInfo.ConvertTime(value.Value, Kyiv).ToString("dd.MM.yyyy HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture);
+        ApplicationTime.InKyiv(value.Value).ToString("dd.MM.yyyy HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture);
 
     public static async Task<byte[]> BuildAsync(ApolloDbContext db, CancellationToken ct)
     {
