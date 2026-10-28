@@ -216,6 +216,14 @@ await Task.WhenAll(Enumerable.Range(0, 8).Select(async _ => {
 await using (var visitDb = new ApolloDbContext(memoryOptions))
     Check(await visitDb.Users.CountAsync() == 1, "Parallel initial form requests register a single visitor without errors");
 Check(JsonSerializer.Serialize(TelegramClient.Keyboard(1, true), new JsonSerializerOptions { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping }).Contains("Почато ремонт"), "Telegram button labels preserve Ukrainian encoding");
+db.Breakdowns.AddRange(
+    new Breakdown { RequestId = Guid.NewGuid(), TelegramUserId = owner.Id, Machine = "TZ-WINTER", CreatedAt = new DateTimeOffset(2026, 1, 15, 10, 0, 0, TimeSpan.Zero), RepairStartedAt = new DateTimeOffset(2026, 1, 15, 10, 30, 0, TimeSpan.Zero), RestoredAt = new DateTimeOffset(2026, 1, 15, 11, 30, 0, TimeSpan.Zero) },
+    new Breakdown { RequestId = Guid.NewGuid(), TelegramUserId = owner.Id, Machine = "TZ-SUMMER", CreatedAt = new DateTimeOffset(2026, 7, 15, 10, 0, 0, TimeSpan.Zero), RepairStartedAt = new DateTimeOffset(2026, 7, 15, 10, 30, 0, TimeSpan.Zero), RestoredAt = new DateTimeOffset(2026, 7, 15, 11, 30, 0, TimeSpan.Zero) });
+await db.SaveChangesAsync();
+var localCsv = Encoding.UTF8.GetString(await HistoryExport.BuildAsync(db, default));
+Check(localCsv.Contains("Зареєстровано (Київ)") && localCsv.Contains("Почато ремонт (Київ)") && localCsv.Contains("Відновлено (Київ)") && !localCsv.Contains("(UTC)"), "CSV date columns explicitly identify Kyiv time");
+Check(localCsv.Contains("15.01.2026 12:00:00") && localCsv.Contains("15.01.2026 12:30:00") && localCsv.Contains("15.01.2026 13:30:00"), "CSV converts all report timestamps to Kyiv winter time (UTC+2)");
+Check(localCsv.Contains("15.07.2026 13:00:00") && localCsv.Contains("15.07.2026 13:30:00") && localCsv.Contains("15.07.2026 14:30:00"), "CSV converts all report timestamps to Kyiv summer time (UTC+3)");
 Console.WriteLine($"{passed} checks passed.");
 
 sealed class RecordingHandler : HttpMessageHandler
