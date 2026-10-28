@@ -20,7 +20,7 @@ public sealed class BreakdownService(ApolloDbContext db, IConfiguration config)
     {
         input = input with { Person = (input.Person ?? "").Trim(), Description = (input.Description ?? "").Trim() };
         var fingerprint = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(input))));
-        var previous = await db.Breakdowns.SingleOrDefaultAsync(x => x.TelegramUserId == user.Id && x.RequestId == input.RequestId, ct);
+        var previous = await db.Breakdowns.IgnoreQueryFilters().SingleOrDefaultAsync(x => x.TelegramUserId == user.Id && x.RequestId == input.RequestId, ct);
         if (previous is not null) return SameRequest(previous, fingerprint);
         if (input.RequestId == Guid.Empty) throw new RuleException("Відсутній ідентифікатор заявки.");
         if (input.Person.Length is < 2 or > 300) throw new RuleException("Вкажіть ПІБ працівника (2–300 символів).");
@@ -51,15 +51,34 @@ public sealed class BreakdownService(ApolloDbContext db, IConfiguration config)
         catch (DbUpdateException)
         {
             db.ChangeTracker.Clear();
-            previous = await db.Breakdowns.SingleOrDefaultAsync(x => x.TelegramUserId == user.Id && x.RequestId == input.RequestId, ct);
+            previous = await db.Breakdowns.IgnoreQueryFilters().SingleOrDefaultAsync(x => x.TelegramUserId == user.Id && x.RequestId == input.RequestId, ct);
             if (previous is null) throw;
             return SameRequest(previous, fingerprint);
         }
         return report;
     }
 
-    private static Breakdown SameRequest(Breakdown report, string fingerprint) => report.Fingerprint == fingerprint
-        ? report : throw new RuleException("Ідентифікатор вже використано для іншої заявки. Створіть нову заявку.", 409);
+    private static Breakdown SameRequest(Breakdown report, string fingerprint)
+    {
+        if (report.DeletedAt is not null) throw new RuleException("Заявку видалено адміністратором. Для нової заявки оновіть форму.", 409);
+        return report.Fingerprint == fingerprint ? report : throw new RuleException("Ідентифікатор вже використано для іншої заявки. Створіть нову заявку.", 409);
+    }
+
+    public async Task DeleteAsync(int id, AppUser actor, CancellationToken ct)
+    {
+        if (!actor.IsAdmin) throw new RuleException("Видаляти заявки може лише адміністратор.", 403);
+        var report = await db.Breakdowns.IgnoreQueryFilters().SingleOrDefaultAsync(x => x.Id == id, ct)
+            ?? throw new RuleException("Заявку не знайдено.", 404);
+        if (report.DeletedAt is not null) return;
+        var now = DateTimeOffset.UtcNow;
+        report.DeletedAt = now;
+        report.DeletedByUserId = actor.Id;
+        report.Version = Guid.NewGuid();
+        var pending = await db.Notifications.Where(x => x.BreakdownId == id && x.SentAt == null && x.CancelledAt == null).ToListAsync(ct);
+        foreach (var notification in pending) { notification.CancelledAt = now; notification.Version = Guid.NewGuid(); }
+        try { await db.SaveChangesAsync(ct); }
+        catch (DbUpdateConcurrencyException) { throw new RuleException("Заявка змінилася. Оновіть журнал і повторіть видалення.", 409); }
+    }
 
     public async Task<Breakdown> RestoreAsync(int id, AppUser user, CancellationToken ct, bool fromConfiguredGroup = false)
     {
@@ -75,6 +94,7 @@ public sealed class BreakdownService(ApolloDbContext db, IConfiguration config)
         catch (DbUpdateException) {
             foreach (var notification in notifications) db.Entry(notification).State = EntityState.Detached;
             await db.Entry(report).ReloadAsync(ct);
+            if (report.DeletedAt is not null) throw new RuleException("Заявку видалено адміністратором.", 404);
             if (report.RestoredAt is null) throw;
         }
         return report;
@@ -95,6 +115,7 @@ public sealed class BreakdownService(ApolloDbContext db, IConfiguration config)
         {
             foreach (var notification in notifications) db.Entry(notification).State = EntityState.Detached;
             await db.Entry(report).ReloadAsync(ct);
+            if (report.DeletedAt is not null) throw new RuleException("Заявку видалено адміністратором.", 404);
             if (report.RepairStartedAt is null) throw;
         }
         return report;

@@ -41,7 +41,7 @@ export default function App() {
       {loading ? <div className="card empty" role="status">Завантаження форми…</div> : error ? <div className="card empty"><h2>Не вдалося відкрити форму</h2><p role="alert">{error}</p><button onClick={() => void load()}>Спробувати ще раз</button></div> : me && <>
         <nav className="tabs" aria-label="Розділи"><button className={tab === 'form' ? 'active' : ''} onClick={() => setTab('form')}><span>＋</span> Нова заявка</button><button className={tab === 'history' ? 'active' : ''} onClick={() => setTab('history')}>Усі заявки</button>{me.user.isAdmin && <button className={tab === 'catalog' ? 'active' : ''} onClick={() => setTab('catalog')}>Адміністрування</button>}</nav>
         <div hidden={tab !== 'form'}><ReportForm user={me.user} options={options} reloadOptions={loadOptions} onHistory={() => setTab('history')} /></div>
-        {tab === 'history' && <History demo={me.demo} />}
+        {tab === 'history' && <History demo={me.demo} admin={me.user.isAdmin} />}
         {tab === 'catalog' && me.user.isAdmin && <><AdminPanel currentUserId={me.user.id} /><Catalog options={options} reload={loadOptions} /></>}
       </>}
       <footer><strong>APOLLO</strong><span>Єдиний журнал. Кожна поломка має значення.</span><span>Час журналу: Київ</span></footer>

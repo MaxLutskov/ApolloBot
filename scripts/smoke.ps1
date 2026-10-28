@@ -120,6 +120,12 @@ try {
     $csv = Request '/export' $operator
     Assert ($csv.StatusCode -eq 200 -and $csv.Content.Contains('Простій, хв') -and $csv.Content.Contains('Ремонт, сек')) 'CSV contains automatic downtime'
     Assert ((Invoke-WebRequest "$base/api/telegram/webhook" -Method POST -Body '{}' -ContentType 'application/json' -SkipHttpErrorCheck).StatusCode -eq 404) 'Demo webhook rejects Telegram callbacks'
+    Assert ((Request "/breakdowns/$($report.id)" $operator 'DELETE').StatusCode -eq 403) 'Operator cannot delete reports via API'
+    Assert ((Request "/breakdowns/$($report.id)" $admin 'DELETE').StatusCode -eq 200) 'Admin can delete a report'
+    Assert ((Request "/breakdowns/$($report.id)" $admin 'DELETE').StatusCode -eq 200) 'Repeated deletion succeeds without duplicating actions'
+    $remaining = (Request '/breakdowns' $operator).Content | ConvertFrom-Json
+    Assert ($remaining.total -eq 1 -and -not ($remaining.items | Where-Object id -eq $report.id)) 'Deleted report disappears for every user'
+    Assert ((Request "/breakdowns/$($report.id)/restore" $admin 'POST').StatusCode -eq 404) 'Deleted report cannot be restored by old buttons'
     Write-Output 'All HTTP smoke checks passed.'
 } finally {
     if ($null -ne $serverProcess -and -not $serverProcess.HasExited) { Stop-Process -Id $serverProcess.Id }

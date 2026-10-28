@@ -38,6 +38,10 @@ public static class Endpoints
                     canStartRepair = x.RestoredAt is null && x.RequiresRepairStart && x.RepairStartedAt is null,
                     canRestore = x.RestoredAt is null && (!x.RequiresRepairStart || x.RepairStartedAt is not null) }) });
         });
+        api.MapDelete("/breakdowns/{id:int}", async (int id, HttpContext ctx, BreakdownService service, CancellationToken ct) => {
+            await service.DeleteAsync(id, User(ctx), ct);
+            return Results.Ok(new { message = "Заявку видалено." });
+        });
         api.MapPost("/breakdowns/{id:int}/restore", async (int id, HttpContext ctx, BreakdownService service, CancellationToken ct) => {
             var r = await service.RestoreAsync(id, User(ctx), ct);
             return Results.Ok(new { r.Id, r.RestoredAt, downtimeSeconds = BreakdownService.DowntimeSeconds(r, DateTimeOffset.UtcNow) });
@@ -84,8 +88,8 @@ public static class Endpoints
             return Results.Ok(Dto(option));
         });
         admin.MapGet("/notifications", async (ApolloDbContext db, CancellationToken ct) => Results.Ok(new {
-            pending = await db.Notifications.CountAsync(x => x.SentAt == null, ct),
-            delayed = await db.Notifications.CountAsync(x => x.SentAt == null && x.Attempts > 0, ct)
+            pending = await db.Notifications.CountAsync(x => x.SentAt == null && x.CancelledAt == null, ct),
+            delayed = await db.Notifications.CountAsync(x => x.SentAt == null && x.CancelledAt == null && x.Attempts > 0, ct)
         }));
         admin.MapGet("/audit", async (ApolloDbContext db, CancellationToken ct) => Results.Ok(await db.Audit.AsNoTracking().OrderByDescending(x => x.Id).Take(100).ToListAsync(ct)));
         admin.MapGet("/export", async (ApolloDbContext db, CancellationToken ct) => Results.File(await HistoryExport.BuildAsync(db, ct), "text/csv; charset=utf-8", "Apollo-history.csv"));

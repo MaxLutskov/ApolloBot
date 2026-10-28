@@ -187,6 +187,27 @@ Check(await db.ReminderDeliveries.CountAsync() == 2, "Second daily reminder uses
 await service.RestoreAsync(pendingReport.Id, other, default);
 Check(await reminderService.BuildTextAsync(morning, default) is null, "Reminder retry suppresses messages after all reports are resolved");
 
+var deleteInput = input with { RequestId = Guid.NewGuid(), Description = "DELETE-CSV-MARKER" };
+var toDelete = await service.SubmitAsync(deleteInput, owner, default);
+var queued = await db.Notifications.Where(x => x.BreakdownId == toDelete.Id).ToListAsync();
+foreach (var item in queued) item.SentAt = null;
+await db.SaveChangesAsync();
+await Reject(() => service.DeleteAsync(toDelete.Id, owner, default), 403, "Ordinary users cannot delete reports");
+Check(await db.Breakdowns.AnyAsync(x => x.Id == toDelete.Id), "Denied deletion preserves the report");
+await service.DeleteAsync(toDelete.Id, adminUser, default);
+Check(!await db.Breakdowns.AnyAsync(x => x.Id == toDelete.Id), "Deleted reports are excluded from history queries");
+var archived = await db.Breakdowns.IgnoreQueryFilters().SingleAsync(x => x.Id == toDelete.Id);
+Check(archived.DeletedAt is not null && archived.DeletedByUserId == adminUser.Id, "Deletion preserves the record and records the administrator");
+Check(queued.All(x => x.CancelledAt is not null && x.SentAt is null), "Deletion cancels pending notifications without claiming they were sent");
+var deletedAt = archived.DeletedAt;
+await service.DeleteAsync(toDelete.Id, adminUser, default);
+Check(archived.DeletedAt == deletedAt, "Repeated deletion is idempotent");
+await Reject(() => service.RestoreAsync(toDelete.Id, owner, default), 404, "Old Telegram restore buttons cannot change deleted reports");
+await Reject(() => service.StartRepairAsync(toDelete.Id, owner, default), 404, "Deleted reports cannot start repairs");
+await Reject(() => service.SubmitAsync(deleteInput, owner, default), 409, "A retried submission cannot recreate a deleted report");
+Check(!Encoding.UTF8.GetString(await HistoryExport.BuildAsync(db, default)).Contains("DELETE-CSV-MARKER"), "CSV excludes deleted reports");
+Check(await reminderService.BuildTextAsync(morning, default) is null, "Deleted open reports do not trigger reminders");
+
 var memoryOptions = new DbContextOptionsBuilder<ApolloDbContext>().UseInMemoryDatabase("parallel-visits-" + Guid.NewGuid()).Options;
 await Task.WhenAll(Enumerable.Range(0, 8).Select(async _ => {
     await using var visitDb = new ApolloDbContext(memoryOptions);

@@ -8,3 +8,6 @@
 .admin-row small { display:block; margin-top:6px; color:#52657a; }
 button.danger { background:#b42332; color:white; }
 @media(max-width:640px) { .admin-row { align-items:flex-start; flex-direction:column; } }
+
+.report-delete { margin-top: 16px; }
+.report-delete .error-box { margin-top: 12px; }

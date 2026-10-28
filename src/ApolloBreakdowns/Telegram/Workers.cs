@@ -59,7 +59,7 @@ public sealed class NotificationWorker(IServiceScopeFactory scopes, IConfigurati
                 var db = scope.ServiceProvider.GetRequiredService<ApolloDbContext>();
                 var telegram = scope.ServiceProvider.GetRequiredService<TelegramClient>();
                 var now = DateTimeOffset.UtcNow;
-                var items = await db.Notifications.Where(x => x.SentAt == null && x.NextAttemptAt <= now).OrderBy(x => x.Id).Take(10).ToListAsync(ct);
+                var items = await db.Notifications.Where(x => x.SentAt == null && x.CancelledAt == null && x.NextAttemptAt <= now).OrderBy(x => x.Id).Take(10).ToListAsync(ct);
                 foreach (var item in items)
                 {
                     // Optimistic lease prevents two Azure instances from sending the same job concurrently.
@@ -67,9 +67,12 @@ public sealed class NotificationWorker(IServiceScopeFactory scopes, IConfigurati
                     try { await db.SaveChangesAsync(ct); }
                     catch (DbUpdateConcurrencyException) { db.Entry(item).State = EntityState.Detached; continue; }
                     try {
-                        var report = await db.Breakdowns.AsNoTracking().SingleAsync(x => x.Id == item.BreakdownId, ct);
-                        await telegram.SendNotificationAsync(item.ChatId, item.Text, item.BreakdownId, report.RestoredAt is null && (item.Kind is "new" or "repairStarted"), ct, report.RequiresRepairStart && report.RepairStartedAt is null);
-                        item.SentAt = DateTimeOffset.UtcNow;
+                        var report = await db.Breakdowns.IgnoreQueryFilters().AsNoTracking().SingleAsync(x => x.Id == item.BreakdownId, ct);
+                        if (report.DeletedAt is not null) item.CancelledAt = DateTimeOffset.UtcNow;
+                        else {
+                            await telegram.SendNotificationAsync(item.ChatId, item.Text, item.BreakdownId, report.RestoredAt is null && (item.Kind is "new" or "repairStarted"), ct, report.RequiresRepairStart && report.RepairStartedAt is null);
+                            item.SentAt = DateTimeOffset.UtcNow;
+                        }
                     }
                     catch (OperationCanceledException) when (ct.IsCancellationRequested) { return; }
                     catch {

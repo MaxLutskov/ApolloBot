@@ -40,6 +40,8 @@ public sealed class Breakdown
     public bool RequiresRepairStart { get; set; }
     public DateTimeOffset? RepairStartedAt { get; set; }
     public long? RepairStartedByUserId { get; set; }
+    public DateTimeOffset? DeletedAt { get; set; }
+    public long? DeletedByUserId { get; set; }
     public DateTimeOffset? RestoredAt { get; set; }
     public long? RestoredByUserId { get; set; }
     public Guid Version { get; set; } = Guid.NewGuid();
@@ -57,6 +59,7 @@ public sealed class Notification
     public int Attempts { get; set; }
     public DateTimeOffset NextAttemptAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset? SentAt { get; set; }
+    public DateTimeOffset? CancelledAt { get; set; }
     public Guid Version { get; set; } = Guid.NewGuid();
 }
 
@@ -154,6 +157,7 @@ public sealed class ApolloDbContext(DbContextOptions<ApolloDbContext> options) :
             e.HasOne(x => x.Parent).WithMany().HasForeignKey(x => x.ParentId).OnDelete(DeleteBehavior.Restrict);
         });
         b.Entity<Breakdown>(e => {
+            e.HasQueryFilter(x => x.DeletedAt == null);
             e.HasIndex(x => new { x.TelegramUserId, x.RequestId }).IsUnique();
             e.HasIndex(x => new { x.TelegramUserId, x.CreatedAt });
             e.Property(x => x.Fingerprint).HasMaxLength(64);
