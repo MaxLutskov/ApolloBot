@@ -157,6 +157,12 @@ namespace ApolloBreakdowns.Data.Migrations
                         .HasMaxLength(300)
                         .HasColumnType("nvarchar(300)");
 
+                    b.Property<DateTimeOffset?>("ProcessRestoredAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<int?>("ProcessRestoredByBreakdownId")
+                        .HasColumnType("int");
+
                     b.Property<string>("RepairMethod")
                         .IsRequired()
                         .HasMaxLength(300)
@@ -170,6 +176,13 @@ namespace ApolloBreakdowns.Data.Migrations
 
                     b.Property<Guid>("RequestId")
                         .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("RequestType")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)")
+                        .HasDefaultValue("emergency");
 
                     b.Property<bool>("RequiresRepairStart")
                         .HasColumnType("bit");
@@ -203,6 +216,8 @@ namespace ApolloBreakdowns.Data.Migrations
                         .HasColumnType("uniqueidentifier");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("RequestType", "ProcessRestoredAt");
 
                     b.HasIndex("TelegramUserId", "CreatedAt");
 

@@ -52,7 +52,7 @@ try {
     $node = $options | Where-Object { $_.kind -eq 'node' -and $_.parentId -eq $part.id } | Select-Object -First 1
     $fault = $options | Where-Object { $_.kind -eq 'fault' -and $_.parentId -eq $node.id -and -not $_.requiresDescription } | Select-Object -First 1
     $body = @{
-        requestId = [guid]::NewGuid().ToString(); person = 'Тестовий оператор'; description = ''
+        requestType = 'emergency'; requestId = [guid]::NewGuid().ToString(); person = 'Тестовий оператор'; description = ''
         siteId = ($options | Where-Object kind -eq 'site' | Select-Object -First 1).id
         shiftId = ($options | Where-Object kind -eq 'shift' | Select-Object -First 1).id
         machineId = ($options | Where-Object kind -eq 'machine' | Select-Object -First 1).id
@@ -81,6 +81,14 @@ try {
     $closed = (Request "/breakdowns/$($report.id)/restore" $operator 'POST').Content | ConvertFrom-Json
     $again = (Request "/breakdowns/$($report.id)/restore" $operator 'POST').Content | ConvertFrom-Json
     Assert ($null -ne $closed.restoredAt -and $closed.restoredAt -eq $again.restoredAt) 'Restoration time is fixed and idempotent'
+    $afterRecovery = (Request '/breakdowns' $operator).Content | ConvertFrom-Json
+    $recoveredProcess = $afterRecovery.items | Where-Object id -eq $report.id
+    Assert ($null -ne $recoveredProcess.processRestoredAt -and $recoveredProcess.processRestoredByBreakdownId -eq $other.id -and -not $recoveredProcess.processDowntimeRunning) 'Process recovery is persisted independently of machine closure'
+    $slowBody = $body.Clone(); $slowBody.requestId = [guid]::NewGuid().ToString(); $slowBody.requestType = 'productivity'; $slowBody.hasReserveApollo = $null
+    $slow = (Request '/breakdowns' $operator 'POST' $slowBody).Content | ConvertFrom-Json
+    $slowState = ((Request '/breakdowns' $operator).Content | ConvertFrom-Json).items | Where-Object id -eq $slow.id
+    Assert ($slowState.requestType -eq 'productivity' -and $slowState.downtimeSeconds -eq 0 -and $slowState.processDowntimeSeconds -eq 0 -and -not $slowState.processDowntimeRunning) 'Productivity report has zero downtime in the public API'
+    Assert ((Request "/breakdowns/$($slow.id)" $admin 'DELETE').StatusCode -eq 200) 'Temporary productivity report can be removed'
     $newOption = @{ kind = 'site'; parentId = $null; label = 'Тестова дільниця'; active = $true; requiresDescription = $false; requiresReserve = $false; sortOrder = 999 }
     $added = (Request '/admin/options' $admin 'POST' $newOption).Content | ConvertFrom-Json
     Assert ($added.id -gt 0) 'Admin can add a field option'
@@ -118,7 +126,7 @@ try {
     Assert (-not (((Request '/options' $admin).Content | ConvertFrom-Json) | Where-Object { $_.id -eq $newPart.id -or $_.parentId -eq $newPart.id -or $_.parentId -eq $otherNode.id })) 'Deleted subtree is hidden'
     Assert (((Request '/breakdowns' $operator).Content | ConvertFrom-Json).total -eq 2) 'Catalog deletion does not delete reports'
     $csv = Request '/export' $operator
-    Assert ($csv.StatusCode -eq 200 -and $csv.Content.Contains('Простій, хв') -and $csv.Content.Contains('Ремонт, сек')) 'CSV contains automatic downtime'
+    Assert ($csv.StatusCode -eq 200 -and $csv.Content.Contains('Простій машини, хв') -and $csv.Content.Contains('Ремонт, сек')) 'CSV contains automatic downtime'
     Assert ((Invoke-WebRequest "$base/api/telegram/webhook" -Method POST -Body '{}' -ContentType 'application/json' -SkipHttpErrorCheck).StatusCode -eq 404) 'Demo webhook rejects Telegram callbacks'
     Assert ((Request "/breakdowns/$($report.id)" $operator 'DELETE').StatusCode -eq 403) 'Operator cannot delete reports via API'
     Assert ((Request "/breakdowns/$($report.id)" $admin 'DELETE').StatusCode -eq 200) 'Admin can delete a report'

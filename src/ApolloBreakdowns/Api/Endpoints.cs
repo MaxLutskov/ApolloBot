@@ -25,7 +25,7 @@ public static class Endpoints
         });
         api.MapPost("/breakdowns", async (SubmitBreakdown input, HttpContext ctx, BreakdownService service, CancellationToken ct) => {
             var result = await service.SubmitAsync(input, User(ctx), ct);
-            return Results.Ok(new { result.Id, result.RequestId, result.CreatedAt, message = "Заявку успішно збережено" });
+            return Results.Ok(new { result.Id, result.RequestId, result.CreatedAt, result.RequestType, message = "Заявку успішно збережено" });
         });
         api.MapGet("/breakdowns", async (HttpContext ctx, ApolloDbContext db, int? page, CancellationToken ct) => {
             var q = db.Breakdowns.AsNoTracking();
@@ -33,8 +33,10 @@ public static class Endpoints
             var items = await q.OrderByDescending(x => x.CreatedAt).ThenByDescending(x => x.Id).Skip((p - 1) * 20).Take(20).ToListAsync(ct);
             return Results.Ok(new { total = await q.CountAsync(ct), page = p, pageSize = 20, serverTime = DateTimeOffset.UtcNow,
                 items = items.Select(x => new { x.Id, x.Site, x.Shift, x.Person, x.Machine, x.Part, x.Node, x.Fault, x.Description,
-                    x.RepairMethod, x.HasReserveApollo, x.RequiresRepairStart, x.RepairStartedAt, x.RepairStartedByUserId, x.CreatedAt, x.RestoredAt, x.RestoredByUserId,
-                    downtimeSeconds = BreakdownService.DowntimeSeconds(x, DateTimeOffset.UtcNow), repairSeconds = BreakdownService.RepairSeconds(x, DateTimeOffset.UtcNow),
+                    x.RepairMethod, x.RequestType, x.ProcessRestoredAt, x.ProcessRestoredByBreakdownId, x.HasReserveApollo, x.RequiresRepairStart, x.RepairStartedAt, x.RepairStartedByUserId, x.CreatedAt, x.RestoredAt, x.RestoredByUserId,
+                    downtimeSeconds = BreakdownService.DowntimeSeconds(x, DateTimeOffset.UtcNow),
+                    processDowntimeSeconds = BreakdownService.ProcessDowntimeSeconds(x, DateTimeOffset.UtcNow),
+                    processDowntimeRunning = x.RequestType == BreakdownService.Emergency && x.HasReserveApollo != true && x.ProcessRestoredAt == null, repairSeconds = BreakdownService.RepairSeconds(x, DateTimeOffset.UtcNow),
                     canStartRepair = x.RestoredAt is null && x.RequiresRepairStart && x.RepairStartedAt is null,
                     canRestore = x.RestoredAt is null && (!x.RequiresRepairStart || x.RepairStartedAt is not null) }) });
         });

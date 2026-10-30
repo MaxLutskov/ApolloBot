@@ -2,9 +2,9 @@ import { useEffect, useRef, useState } from 'react'
 import { api, ApiError, post, dateText, type Option, type User } from './api'
 import { available, changeField, cascadeOther, missingFields } from './form.mjs'
 
-type Form = { requestId: string; siteId: string; shiftId: string; person: string; machineId: string; partId: string; nodeId: string; faultId: string; description: string; repairMethodId: string; hasReserveApollo: string }
-const blank = (): Form => ({ requestId: crypto.randomUUID(), siteId: '', shiftId: '', person: '', machineId: '', partId: '', nodeId: '', faultId: '', description: '', repairMethodId: '', hasReserveApollo: '' })
-type Receipt = { id: number; requestId: string; createdAt: string }
+type Form = { requestType: string; requestId: string; siteId: string; shiftId: string; person: string; machineId: string; partId: string; nodeId: string; faultId: string; description: string; repairMethodId: string; hasReserveApollo: string }
+const blank = (): Form => ({ requestType: '', requestId: crypto.randomUUID(), siteId: '', shiftId: '', person: '', machineId: '', partId: '', nodeId: '', faultId: '', description: '', repairMethodId: '', hasReserveApollo: '' })
+type Receipt = { requestType: string; id: number; requestId: string; createdAt: string }
 
 export default function ReportForm({ user, options, reloadOptions, onHistory }: { user: User; options: Option[]; reloadOptions(): Promise<void>; onHistory(): void }) {
   const draftKey = `apollo-draft-${user.id}`
@@ -23,7 +23,7 @@ export default function ReportForm({ user, options, reloadOptions, onHistory }: 
   const set = (name: keyof Form, value: string) => { setError(''); setForm(f => changeField(f, name, value, crypto.randomUUID(), options)) }
   useEffect(() => { setForm(f => cascadeOther(f, options)) }, [options])
   const needsDescription = options.some(o => [form.partId, form.nodeId, form.faultId].includes(String(o.id)) && o.requiresDescription)
-  const needsReserve = options.some(o => o.id === +form.repairMethodId && o.requiresReserve)
+  const needsReserve = form.requestType === 'emergency'
   const select = (name: keyof Form, label: string, kind: string, placeholder: string, parent?: string) => {
     const list = available(options, kind, parent) as Option[]
     const optionValue = (option: Option) => name === 'person' ? option.label : String(option.id)
@@ -49,11 +49,12 @@ export default function ReportForm({ user, options, reloadOptions, onHistory }: 
       if (e instanceof ApiError && e.status === 409) await reloadOptions().catch(() => {})
     } finally { locked.current = false; setBusy(false) }
   }
-  if (receipt) return <section className="card receipt" aria-live="polite"><div className="success-icon">✓</div><div className="eyebrow">ЗБЕРЕЖЕНО В ЖУРНАЛІ</div><h2>Заявку №{receipt.id} отримано</h2><p>Відлік простою розпочато. В особистий чат надійде підтвердження. Стан заявки можна змінити у спільному журналі або в повідомленні групи APOLLO.</p><div className="receipt-details"><span>Початок простою<strong>{dateText(receipt.createdAt)}</strong></span><span>Код заявки<strong>{receipt.requestId.slice(0, 8)}</strong></span></div><div className="actions"><button onClick={reset}>Зареєструвати ще одну</button><button className="secondary" onClick={onHistory}>Відкрити журнал</button></div></section>
+  if (receipt) return <section className="card receipt" aria-live="polite"><div className="success-icon">✓</div><div className="eyebrow">ЗБЕРЕЖЕНО В ЖУРНАЛІ</div><h2>Заявку №{receipt.id} отримано</h2><p>{receipt.requestType === 'productivity' ? 'Зниження продуктивності зафіксовано без нарахування простою.' : 'Відлік простою машини розпочато.'} В особистий чат надійде підтвердження. Стан заявки можна змінити у спільному журналі або в повідомленні групи APOLLO.</p><div className="receipt-details"><span>Зареєстровано<strong>{dateText(receipt.createdAt)}</strong></span><span>Код заявки<strong>{receipt.requestId.slice(0, 8)}</strong></span></div><div className="actions"><button onClick={reset}>Зареєструвати ще одну</button><button className="secondary" onClick={onHistory}>Відкрити журнал</button></div></section>
 
   return <div className="form-layout"><form className="card report-form" onSubmit={submit} noValidate>
     <div className="card-heading"><div><div className="eyebrow">НОВА РЕЄСТРАЦІЯ</div><h2>Повідомити про поломку</h2></div><span className="badge">APOLLO</span></div>
     {error && <div ref={errorSummary} tabIndex={-1} className="error-box" role="alert">{error}</div>}
+    <label className="field request-type">Тип заявки <span className="required">*</span><select name="requestType" aria-invalid={invalidField('requestType')} value={form.requestType} required disabled={busy} onChange={e => set('requestType', e.target.value)}><option value="">Оберіть тип заявки</option><option value="emergency">Аварійна</option><option value="productivity">Зниження продуктивності</option></select>{invalidField('requestType') && <small className="error">Оберіть тип заявки.</small>}</label>
     <fieldset disabled={busy}><legend><span>01</span> Місце та відповідальний</legend><div className="grid">
       {select('siteId', 'Дільниця', 'site', 'Оберіть дільницю')}
       {select('shiftId', 'Зміна', 'shift', 'Оберіть зміну')}
@@ -69,7 +70,7 @@ export default function ReportForm({ user, options, reloadOptions, onHistory }: 
     <fieldset disabled={busy}><legend><span>03</span> Виконання ремонту</legend><div className="grid">
       {select('repairMethodId', 'Виконання ремонту', 'repairMethod', 'Оберіть виконавця ремонту')}
       {needsReserve && <label className="field">Чи є резервне APOLLO? <span className="required">*</span><select name="hasReserveApollo" aria-invalid={invalidField("hasReserveApollo")} required value={form.hasReserveApollo} onChange={e => set('hasReserveApollo', e.target.value)}><option value="">Оберіть відповідь</option><option value="yes">Так</option><option value="no">Ні</option></select>{invalidField("hasReserveApollo") && <small className="error">Оберіть «Так» або «Ні».</small>}</label>}
-    </div><div className="timer-note">◷ Простій рахується автоматично: від надсилання заявки до натискання «Проблему вирішено». Мінімальний облікований простій — 10 хвилин.</div></fieldset>
+    </div><div className="timer-note">{form.requestType === 'productivity' ? 'Для зниження продуктивності простій машини та процесу не нараховується.' : 'Простій машини: від створення до завершення заявки, мінімум 10 хв. Простій процесу: за наявності резерву — 20 хв, без резерву — до завершення ремонту будь-якого APOLLO, мінімум 10 хв.'}</div></fieldset>
 
     <div className="actions"><button disabled={busy} type="submit">{busy ? 'Зберігаємо…' : 'Надіслати заявку'} <span aria-hidden="true">↗</span></button><button disabled={busy} type="button" className="secondary" onClick={reset}>Очистити</button></div><p className="form-note">Після збереження ви отримаєте номер заявки та підтвердження.</p>
   </form><aside><div className="guide"><div className="guide-icon" aria-hidden="true">↗</div><div className="eyebrow">ШВИДКА РЕЄСТРАЦІЯ</div><h3>Від поломки —<br />до запису в журналі.</h3><p>Оберіть обладнання та несправність зі списку. Кожен наступний список залежить від попереднього.</p><div className="guide-divider" /><strong>Не знайшли несправність?</strong><p>Оберіть «Інша несправність» і коротко опишіть ситуацію.</p><div className="guide-divider" /><small>Ви увійшли як</small><div className="user-name">{user.name || `Користувач ${user.id}`}</div></div><p className="aside-note">Чернетка зберігається в цій вкладці під час заповнення.</p></aside></div>

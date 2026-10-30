@@ -1,13 +1,13 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { available, changeField, durationText, downtimeText, missingFields, cascadeOther } from './form.mjs'
+import { available, changeField, durationText, downtimeText, reportDowntimeText, missingFields, cascadeOther } from './form.mjs'
 
 test('changing parent clears dependent values and changes idempotency key', () => {
   const next = changeField({ partId: '1', nodeId: '2', faultId: '3' }, 'partId', '4', 'new-id')
   assert.equal(next.nodeId, ''); assert.equal(next.faultId, ''); assert.equal(next.requestId, 'new-id')
 })
-test('changing repair method clears hidden reserve answer', () => {
-  assert.equal(changeField({ hasReserveApollo: 'yes' }, 'repairMethodId', '1', 'new').hasReserveApollo, '')
+test('changing request type clears hidden reserve answer', () => {
+  assert.equal(changeField({ hasReserveApollo: 'yes' }, 'requestType', 'productivity', 'new').hasReserveApollo, '')
 })
 test('catalog hides disabled entries and isolates parent nodes', () => {
   const options = [{ id: 1, kind: 'node', active: true, parentId: 1 }, { id: 2, kind: 'node', active: false, parentId: 1 }, { id: 3, kind: 'node', active: true, parentId: 2 }]
@@ -29,12 +29,12 @@ test('Other node selects only its own Other fault', () => {
 test('empty form reports every missing field with its label', () => {
   const form = { person: '', description: '', hasReserveApollo: '' }
   const missing = missingFields(form, [])
-  assert.equal(missing.length, 8)
+  assert.equal(missing.length, 9)
   assert.ok(missing.some(x => x.field === 'person' && x.label.includes('працівник')))
   assert.ok(missing.some(x => x.field === 'nodeId' && x.label === 'Вузол'))
 })
 test('validation names required description and reserve answer', () => {
-  const form = { person: 'Працівник', partId: '1', repairMethodId: '2', description: ' ', hasReserveApollo: '' }
+  const form = { requestType: 'emergency', person: 'Працівник', partId: '1', repairMethodId: '2', description: ' ', hasReserveApollo: '' }
   const options = [{ id: 1, kind: 'part', requiresDescription: true, active: true }, { id: 2, kind: 'repairMethod', requiresReserve: true, active: true }]
   const missing = missingFields(form, options)
   assert.ok(missing.some(x => x.field === 'description'))
@@ -46,4 +46,18 @@ test('downtime has a ten minute minimum and rounds longer durations', () => {
   assert.equal(downtimeText(630), '11 хв')
   assert.equal(downtimeText(900), '15 хв')
   assert.equal(durationText(30), 'менше 1 хв')
+})
+
+test('productivity reports never accrue either downtime', () => {
+  const report = { requestType: 'productivity', downtimeSeconds: 0, processDowntimeSeconds: 0, processDowntimeRunning: false, restoredAt: null }
+  assert.equal(reportDowntimeText(report, 3600), '0 хв')
+  assert.equal(reportDowntimeText(report, 3600, true), '0 хв')
+  assert.ok(!missingFields({ requestType: 'productivity', description: '' }, []).some(x => x.field === 'hasReserveApollo'))
+})
+test('process timer stops independently of machine and reserve stays twenty minutes', () => {
+  const report = { requestType: 'emergency', downtimeSeconds: 1800, processDowntimeSeconds: 900, processDowntimeRunning: false, restoredAt: null }
+  assert.equal(reportDowntimeText(report, 300), '35 хв')
+  assert.equal(reportDowntimeText(report, 300, true), '15 хв')
+  assert.equal(reportDowntimeText({ ...report, processDowntimeRunning: true }, 300, true), '20 хв')
+  assert.equal(reportDowntimeText({ ...report, hasReserveApollo: true }, 3600, true), '20 хв')
 })

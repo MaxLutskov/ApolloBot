@@ -36,7 +36,10 @@ public sealed class Breakdown
     public string Fault { get; set; } = "";
     public string Description { get; set; } = "";
     public string RepairMethod { get; set; } = "";
+    public string RequestType { get; set; } = "emergency";
     public bool? HasReserveApollo { get; set; }
+    public DateTimeOffset? ProcessRestoredAt { get; set; }
+    public int? ProcessRestoredByBreakdownId { get; set; }
     public bool RequiresRepairStart { get; set; }
     public DateTimeOffset? RepairStartedAt { get; set; }
     public long? RepairStartedByUserId { get; set; }
@@ -186,6 +189,8 @@ public sealed class ApolloDbContext(DbContextOptions<ApolloDbContext> options) :
             e.HasQueryFilter(x => x.DeletedAt == null);
             e.HasIndex(x => new { x.TelegramUserId, x.RequestId }).IsUnique();
             e.HasIndex(x => new { x.TelegramUserId, x.CreatedAt });
+            e.Property(x => x.RequestType).HasMaxLength(20).HasDefaultValue("emergency");
+            e.HasIndex(x => new { x.RequestType, x.ProcessRestoredAt });
             e.Property(x => x.Fingerprint).HasMaxLength(64);
             e.Property(x => x.Version).IsConcurrencyToken();
             foreach (var name in new[] { "TelegramName", "Site", "Shift", "Person", "Machine", "Part", "Node", "Fault", "RepairMethod" }) e.Property<string>(name).HasMaxLength(300);

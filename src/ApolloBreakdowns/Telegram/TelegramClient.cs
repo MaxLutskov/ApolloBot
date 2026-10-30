@@ -75,29 +75,64 @@ public sealed class TelegramClient(HttpClient http, IConfiguration config, Break
     private static string TelegramName(JsonElement user) => string.Join(' ', new[] { "first_name", "last_name" }
         .Select(key => user.TryGetProperty(key, out var name) ? name.GetString() : null).Where(x => !string.IsNullOrWhiteSpace(x)));
 
+    private async Task DismissConfirmationAsync(long chatId, int messageId, CancellationToken ct)
+    {
+        try { await CallAsync("deleteMessage", new { chat_id = chatId, message_id = messageId }, ct); }
+        catch (TelegramException) {
+            // If Telegram disallows deletion, at least remove the obsolete buttons.
+            try { await CallAsync("editMessageReplyMarkup", new { chat_id = chatId, message_id = messageId, reply_markup = new { inline_keyboard = Array.Empty<object>() } }, ct); }
+            catch (TelegramException) { }
+        }
+    }
+
     private async Task HandleCallbackAsync(JsonElement callback, CancellationToken ct)
     {
         var callbackId = callback.GetProperty("id").GetString()!;
         var text = "Невідома дія.";
         try {
             var data = callback.TryGetProperty("data", out var d) ? d.GetString() : null;
-            var parts = data?.Split(':');
-            if (parts is not { Length: 2 } || parts[0] is not ("restore" or "start") || !int.TryParse(parts[1], out var reportId)) return;
-            var start = parts[0] == "start";
+            if (data is null || !callback.TryGetProperty("message", out var message)) return;
             var from = callback.GetProperty("from");
             var userId = from.GetProperty("id").GetInt64();
             if (userId <= 0 || from.TryGetProperty("is_bot", out var isBot) && isBot.GetBoolean()) return;
             var actor = await users.VisitTelegramAsync(userId, TelegramName(from), ct);
             var allowed = config.GetSection("Telegram:AllowedUserIds").Get<long[]>() ?? [];
             if (allowed.Length > 0 && !allowed.Contains(userId) && !actor.IsAdmin) throw new RuleException("Немає доступу.", 403);
-            var hasMessage = callback.TryGetProperty("message", out var message);
-            var chatId = hasMessage ? message.GetProperty("chat").GetProperty("id").GetInt64() : 0;
-            var report = start ? await breakdowns.StartRepairAsync(reportId, actor, ct) : await breakdowns.RestoreAsync(reportId, actor, ct);
-            text = start ? "Початок ремонту зафіксовано." : $"Роботу відновлено. Простій: {BreakdownService.FormatDowntime(BreakdownService.DowntimeSeconds(report, DateTimeOffset.UtcNow))}.";
-            if (hasMessage) {
-                // Removing a button is best effort; database idempotency remains authoritative.
-                try { await CallAsync("editMessageReplyMarkup", new { chat_id = chatId, message_id = message.GetProperty("message_id").GetInt32(), reply_markup = report.RestoredAt is null ? Keyboard(reportId, report.RequiresRepairStart && report.RepairStartedAt is null) : (object)new { inline_keyboard = Array.Empty<object>() } }, ct); }
+            var chatId = message.GetProperty("chat").GetProperty("id").GetInt64();
+            var messageId = message.GetProperty("message_id").GetInt32();
+            if (data.StartsWith("ok:") || data.StartsWith("no:")) {
+                var confirmation = ActionConfirmation.Read(data[3..], config["Telegram:BotToken"] ?? "", userId, chatId, DateTimeOffset.UtcNow)
+                    ?? throw new RuleException("Підтвердження недійсне, належить іншому користувачу або минуло 5 хвилин. Натисніть кнопку заявки ще раз.");
+                if (data.StartsWith("no:")) {
+                    text = "Дію скасовано.";
+                    await DismissConfirmationAsync(chatId, messageId, ct);
+                    return;
+                }
+                var report = confirmation.Start ? await breakdowns.StartRepairAsync(confirmation.ReportId, actor, ct) : await breakdowns.RestoreAsync(confirmation.ReportId, actor, ct);
+                text = confirmation.Start ? "Початок ремонту зафіксовано." : $"Роботу відновлено. Простій машини: {BreakdownService.MachineDowntimeMinutes(report, DateTimeOffset.UtcNow)} хв; процесу: {BreakdownService.ProcessDowntimeMinutes(report, DateTimeOffset.UtcNow)} хв.";
+                await DismissConfirmationAsync(chatId, messageId, ct);
+                try { await CallAsync("editMessageReplyMarkup", new { chat_id = chatId, message_id = confirmation.MessageId, reply_markup = report.RestoredAt is null ? Keyboard(report.Id, report.RequiresRepairStart && report.RepairStartedAt is null) : (object)new { inline_keyboard = Array.Empty<object>() } }, ct); }
                 catch (TelegramException) { }
+            }
+            else {
+                var parts = data.Split(':');
+                if (parts is not { Length: 2 } || parts[0] is not ("restore" or "start") || !int.TryParse(parts[1], out var reportId)) return;
+                var start = parts[0] == "start";
+                var report = await breakdowns.FindAsync(reportId, ct);
+                if (report.RestoredAt is not null) throw new RuleException("Заявку вже завершено.");
+                if (start && (!report.RequiresRepairStart || report.RepairStartedAt is not null)) throw new RuleException("Починати ремонт повторно не потрібно.");
+                if (!start && report.RequiresRepairStart && report.RepairStartedAt is null) throw new RuleException("Спочатку зафіксуйте початок ремонту.");
+                var token = new ActionConfirmation(reportId, userId, chatId, messageId, start).Sign(config["Telegram:BotToken"] ?? "", DateTimeOffset.UtcNow);
+                await CallAsync("sendMessage", new {
+                    chat_id = chatId,
+                    text = $"{actor.Name}, підтвердьте {(start ? "початок ремонту" : "завершення робіт")} за заявкою №{reportId}\n{report.Machine} · {report.Site}" +
+                        (start ? "" : "\nБуде завершено поточний простій процесу для всіх APOLLO без резерву."),
+                    reply_markup = new { inline_keyboard = new[] { new[] {
+                        new { text = "✅ Підтвердити", callback_data = "ok:" + token },
+                        new { text = "Скасувати", callback_data = "no:" + token }
+                    } } }
+                }, ct);
+                text = "Підтвердьте дію в повідомленні нижче.";
             }
         }
         catch (RuleException e) { text = e.Message; }

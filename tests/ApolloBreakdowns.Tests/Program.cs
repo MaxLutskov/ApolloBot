@@ -67,7 +67,7 @@ var node = catalog.First(x => x.Kind == "node" && x.ParentId == part.Id);
 var fault = catalog.First(x => x.Kind == "fault" && x.ParentId == node.Id && !x.RequiresDescription);
 var self = catalog.Single(x => x.Kind == "repairMethod" && !x.RequiresReserve && !x.IsOther);
 var assisted = catalog.First(x => x.Kind == "repairMethod" && x.RequiresReserve && x.RequiresRepairStart);
-var input = new SubmitBreakdown(Guid.NewGuid(), Id("site"), Id("shift"), "Тестовий працівник", Id("machine"), part.Id, node.Id, fault.Id, "", self.Id, null);
+var input = new SubmitBreakdown(Guid.NewGuid(), Id("site"), Id("shift"), "Тестовий працівник", Id("machine"), part.Id, node.Id, fault.Id, "", self.Id, false);
 var owner = new AppUser(22, "Автор", false);
 var other = new AppUser(33, "Учасник групи", false);
 var service = new BreakdownService(db, config);
@@ -76,7 +76,7 @@ Check(report.Id > 0 && report.RestoredAt is null, "Submitting starts an open dow
 Check(await db.Notifications.CountAsync() == 2 && await db.Notifications.AnyAsync(x => x.ChatId == -100123456 && x.Kind == "new"), "Author and APOLLO group get durable notifications");
 Check((await service.SubmitAsync(input, owner, default)).Id == report.Id && await db.Breakdowns.CountAsync() == 1, "Retry does not duplicate report or notifications");
 await Reject(() => service.SubmitAsync(input with { Person = "Інша особа" }, owner, default), 409, "Idempotency rejects different payload with same key");
-await Reject(() => service.SubmitAsync(input with { RequestId = Guid.NewGuid(), RepairMethodId = assisted.Id }, owner, default), 400, "Assisted repair requires reserve answer");
+await Reject(() => service.SubmitAsync(input with { RequestId = Guid.NewGuid(), RepairMethodId = assisted.Id, HasReserveApollo = null }, owner, default), 400, "Assisted repair requires reserve answer");
 var withReserve = await service.SubmitAsync(input with { RequestId = Guid.NewGuid(), RepairMethodId = assisted.Id, HasReserveApollo = false }, owner, default);
 Check(withReserve.HasReserveApollo == false, "No reserve is preserved as false, not missing");
 var otherNode = catalog.First(x => x.Kind == "node" && x.ParentId != part.Id);
@@ -136,6 +136,15 @@ using var update = JsonDocument.Parse(JsonSerializer.Serialize(new { callback_qu
     message = new { message_id = 123, chat = new { id = -100123456L, type = "supergroup" } }
 } }));
 await telegram.HandleUpdateAsync(update.RootElement, default);
+Check(callbackReport.RestoredAt is null, "First Telegram click only requests confirmation");
+var prompt = JsonDocument.Parse(handler.Calls.Last(x => x.Method == "sendMessage").Json);
+var confirmData = prompt.RootElement.GetProperty("reply_markup").GetProperty("inline_keyboard")[0][0].GetProperty("callback_data").GetString()!;
+using var confirmedUpdate = JsonDocument.Parse(JsonSerializer.Serialize(new { callback_query = new {
+    id = "callback2", from = new { id = 33, first_name = "Member", is_bot = false }, data = confirmData,
+    message = new { message_id = 124, chat = new { id = -100123456L, type = "supergroup" } }
+} }));
+await telegram.HandleUpdateAsync(confirmedUpdate.RootElement, default);
+Check(handler.Calls.Any(x => x.Method == "deleteMessage" && JsonDocument.Parse(x.Json).RootElement.GetProperty("message_id").GetInt32() == 124) && !handler.Calls.Any(x => x.Method == "deleteMessage" && JsonDocument.Parse(x.Json).RootElement.GetProperty("message_id").GetInt32() == 123), "Confirmation message is deleted after success while the original report stays in the chat");
 Check(callbackReport.RestoredAt is not null && handler.Calls.Any(x => x.Method == "answerCallbackQuery"), "Group callback closes report and acknowledges button");
 Check(handler.Calls.Any(x => x.Method == "editMessageReplyMarkup"), "Callback removes completed button");
 // New roles are persisted independently of environment settings.
@@ -171,7 +180,7 @@ Check(!handler.Calls.Last().Json.Contains("reply_markup"), "Private confirmation
 await telegram.SendDocumentAsync(22, await HistoryExport.BuildAsync(db, default), default);
 Check(handler.Calls.Last().Method == "sendDocument" && handler.Calls.Last().Json.Contains("Apollo-history.csv"), "CSV is sent as an actual Telegram document");
 var csvBytes = await HistoryExport.BuildAsync(db, default);
-Check(csvBytes.Take(3).SequenceEqual(new byte[] { 239, 187, 191 }) && Encoding.UTF8.GetString(csvBytes).Contains("Простій, хв") && Encoding.UTF8.GetString(csvBytes).Contains("Ремонт, сек"), "CSV includes UTF-8 BOM and separate repair duration");
+Check(csvBytes.Take(3).SequenceEqual(new byte[] { 239, 187, 191 }) && Encoding.UTF8.GetString(csvBytes).Contains("Простій машини, хв") && Encoding.UTF8.GetString(csvBytes).Contains("Ремонт, сек"), "CSV includes UTF-8 BOM and separate repair duration");
 var reminderService = new ReminderService(db, config);
 var morning = new DateTimeOffset(2026, 10, 20, 4, 0, 0, TimeSpan.Zero); // 07:00 Kyiv.
 db.Reminders.AddRange(new ReminderSchedule { Time = "07:00" }, new ReminderSchedule { Time = "12:00" });
@@ -246,6 +255,100 @@ db.Breakdowns.Add(new Breakdown { RequestId = Guid.NewGuid(), TelegramUserId = o
 await db.SaveChangesAsync();
 var minimumRow = Encoding.UTF8.GetString(await HistoryExport.BuildAsync(db, default)).Split('\n').Single(line => line.Contains("MIN-DOWNTIME")).Split(';');
 Check(minimumRow[16].Trim('"') == "10" && minimumRow[17].Trim('"') == "20", "CSV exports ten minute minimum while preserving actual repair seconds");
+
+// Real relational persistence and cross-site process recovery.
+fault.Active = true;
+await db.SaveChangesAsync();
+await Reject(() => service.SubmitAsync(input with { RequestId = Guid.NewGuid(), RequestType = "invalid" }, owner, default), 400, "Unknown request type is rejected");
+await Reject(() => service.SubmitAsync(input with { RequestId = Guid.NewGuid(), HasReserveApollo = null }, owner, default), 400, "Every emergency requires reserve answer even for self repair");
+var outageA = await service.SubmitAsync(input with { RequestId = Guid.NewGuid(), HasReserveApollo = false }, owner, default);
+var secondSite = catalog.First(x => x.Kind == "site" && x.Id != input.SiteId);
+var outageB = await service.SubmitAsync(input with { RequestId = Guid.NewGuid(), SiteId = secondSite.Id, HasReserveApollo = false }, owner, default);
+var reserveOutage = await service.SubmitAsync(input with { RequestId = Guid.NewGuid(), HasReserveApollo = true }, owner, default);
+var slowReport = await service.SubmitAsync(input with { RequestId = Guid.NewGuid(), RequestType = BreakdownService.Productivity, HasReserveApollo = null }, owner, default);
+outageA.CreatedAt = DateTimeOffset.UtcNow.AddMinutes(-45);
+outageB.CreatedAt = DateTimeOffset.UtcNow.AddMinutes(-30);
+reserveOutage.CreatedAt = DateTimeOffset.UtcNow.AddMinutes(-60);
+slowReport.CreatedAt = DateTimeOffset.UtcNow.AddMinutes(-90);
+await db.SaveChangesAsync();
+Check(BreakdownService.ProcessDowntimeMinutes(reserveOutage, now.AddDays(1)) == 20, "Reserve process downtime stays exactly twenty minutes regardless of machine duration");
+Check(BreakdownService.DowntimeSeconds(slowReport, now.AddDays(1)) == 0 && BreakdownService.MachineDowntimeMinutes(slowReport, now.AddDays(1)) == 0 && BreakdownService.ProcessDowntimeMinutes(slowReport, now.AddDays(1)) == 0, "Productivity reports have zero machine and process downtime while open");
+await service.RestoreAsync(slowReport.Id, other, default);
+var recoveredA = await db.Breakdowns.AsNoTracking().SingleAsync(x => x.Id == outageA.Id);
+var recoveredB = await db.Breakdowns.AsNoTracking().SingleAsync(x => x.Id == outageB.Id);
+Check(recoveredA.ProcessRestoredAt == slowReport.RestoredAt && recoveredB.ProcessRestoredAt == slowReport.RestoredAt && recoveredB.ProcessRestoredByBreakdownId == slowReport.Id, "Closing any APOLLO repair persistently ends process downtime across all sites");
+Check(recoveredA.RestoredAt is null && recoveredB.RestoredAt is null, "Process recovery does not close outstanding machine repairs");
+Check(BreakdownService.ProcessDowntimeMinutes(recoveredA, now.AddDays(1)) == 45 && BreakdownService.ProcessDowntimeMinutes(recoveredB, now.AddDays(1)) == 30, "Recovered process downtime stops growing independently of machine downtime");
+Check(BreakdownService.MachineDowntimeMinutes(recoveredA, DateTimeOffset.UtcNow.AddMinutes(20)) >= 65, "Machine downtime continues after another machine restores the process");
+var recoveredAt = recoveredA.ProcessRestoredAt;
+await service.RestoreAsync(reserveOutage.Id, owner, default);
+Check((await db.Breakdowns.AsNoTracking().SingleAsync(x => x.Id == outageA.Id)).ProcessRestoredAt == recoveredAt, "Later repair completions preserve first process recovery");
+Check(BreakdownService.ProcessDowntimeMinutes(reserveOutage, now.AddDays(1)) == 20, "Finishing reserve machine repair does not change its twenty minute process downtime");
+var nextOutage = await service.SubmitAsync(input with { RequestId = Guid.NewGuid(), HasReserveApollo = false }, owner, default);
+await service.RestoreAsync(slowReport.Id, other, default);
+Check(nextOutage.ProcessRestoredAt is null, "Retrying an earlier repair completion does not end a later process outage");
+var removedOutage = await service.SubmitAsync(input with { RequestId = Guid.NewGuid(), HasReserveApollo = false }, owner, default);
+await service.DeleteAsync(removedOutage.Id, adminUser, default);
+Check(nextOutage.ProcessRestoredAt is null, "Deleting a report does not restore the process");
+await service.RestoreAsync(outageA.Id, owner, default);
+Check(nextOutage.ProcessRestoredByBreakdownId == outageA.Id && nextOutage.ProcessRestoredAt is not null, "A later machine restoration closes the new process outage");
+var processCsv = Encoding.UTF8.GetString(await HistoryExport.BuildAsync(db, default));
+var slowCsvRow = processCsv.Split('\n').Single(line => line.StartsWith($"\"{slowReport.Id}\";")).Split(';');
+Check(processCsv.Contains("Простій процесу, хв") && processCsv.Contains("Тип заявки") && slowCsvRow[16].Trim('"') == "0" && slowCsvRow[20].Trim('"') == "0", "CSV contains both downtime groups and zero downtime for productivity reports");
+
+var confirmationTime = DateTimeOffset.UtcNow;
+var signedAction = new ActionConfirmation(outageB.Id, other.Id, -100123456, 123, true);
+var signedToken = signedAction.Sign("test-token", confirmationTime);
+Check(Encoding.UTF8.GetByteCount("ok:" + signedToken) <= 64 && ActionConfirmation.Read(signedToken, "test-token", other.Id, -100123456, confirmationTime) == signedAction, "Telegram confirmation fits callback limit and preserves all signed fields");
+Check(ActionConfirmation.Read(signedToken, "test-token", owner.Id, -100123456, confirmationTime) is null, "Another user cannot confirm a repair action");
+Check(ActionConfirmation.Read(signedToken, "test-token", other.Id, -999, confirmationTime) is null, "Confirmation cannot be moved into another chat");
+Check(ActionConfirmation.Read(signedToken, "test-token", other.Id, -100123456, confirmationTime.AddMinutes(6)) is null, "Expired confirmation cannot change report state");
+Check(ActionConfirmation.Read(signedToken, "wrong-token", other.Id, -100123456, confirmationTime) is null && ActionConfirmation.Read("invalid", "test-token", other.Id, -100123456, confirmationTime) is null, "Forged and malformed confirmations are rejected");
+
+var startPromptReport = await service.SubmitAsync(input with { RequestId = Guid.NewGuid(), RepairMethodId = assisted.Id }, owner, default);
+async Task ClickAsync(string data, long actorId = 33, int messageId = 200) {
+    using var eventJson = JsonDocument.Parse(JsonSerializer.Serialize(new { callback_query = new {
+        id = Guid.NewGuid().ToString(), from = new { id = actorId, first_name = "Member", is_bot = false }, data,
+        message = new { message_id = messageId, chat = new { id = -100123456L, type = "supergroup" } }
+    } }));
+    await telegram.HandleUpdateAsync(eventJson.RootElement, default);
+}
+string PromptButton(int index) {
+    using var json = JsonDocument.Parse(handler.Calls.Last(x => x.Method == "sendMessage").Json);
+    return json.RootElement.GetProperty("reply_markup").GetProperty("inline_keyboard")[0][index].GetProperty("callback_data").GetString()!;
+}
+await ClickAsync($"start:{startPromptReport.Id}");
+Check(startPromptReport.RepairStartedAt is null, "First start-repair click leaves the report unchanged");
+var cancelStart = PromptButton(1);
+var deletesBeforeCancel = handler.Calls.Count(x => x.Method == "deleteMessage");
+await ClickAsync(cancelStart);
+Check(handler.Calls.Count(x => x.Method == "deleteMessage") == deletesBeforeCancel + 1, "Canceling deletes the confirmation message without cluttering the group");
+Check(startPromptReport.RepairStartedAt is null, "Canceling repair start does not start repair");
+await ClickAsync($"start:{startPromptReport.Id}");
+var acceptStart = PromptButton(0);
+await ClickAsync(acceptStart, owner.Id);
+Check(startPromptReport.RepairStartedAt is null, "Other user clicking confirm cannot start repair");
+await ClickAsync(acceptStart);
+Check(startPromptReport.RepairStartedAt is not null, "Confirmed repair start records arrival time");
+await ClickAsync($"restore:{startPromptReport.Id}");
+await ClickAsync(PromptButton(1));
+Check(startPromptReport.RestoredAt is null, "Canceling repair completion leaves the machine repair open");
+await ClickAsync($"restore:{startPromptReport.Id}");
+await ClickAsync(PromptButton(0));
+Check(startPromptReport.RestoredAt is not null, "Confirmed completion closes the machine repair");
+
+var unattendedReport = await service.SubmitAsync(input with { RequestId = Guid.NewGuid(), RepairMethodId = assisted.Id }, owner, default);
+await ClickAsync($"start:{unattendedReport.Id}", other.Id);
+var unattendedConfirmation = PromptButton(0);
+await ClickAsync($"start:{unattendedReport.Id}", owner.Id);
+var secondConfirmation = PromptButton(0);
+Check(unattendedReport.RepairStartedAt is null && unattendedConfirmation != secondConfirmation, "Unanswered confirmation leaves report available and allows another user's independent prompt");
+await ClickAsync(secondConfirmation, owner.Id);
+Check(unattendedReport.RepairStartedByUserId == owner.Id, "Another worker can confirm while the first worker's confirmation is unanswered");
+var firstArrival = unattendedReport.RepairStartedAt;
+await ClickAsync(unattendedConfirmation, other.Id);
+Check(unattendedReport.RepairStartedByUserId == owner.Id && unattendedReport.RepairStartedAt == firstArrival, "A late first confirmation cannot overwrite the worker who already started repair");
+
 Console.WriteLine($"{passed} checks passed.");
 
 sealed class RecordingHandler : HttpMessageHandler
