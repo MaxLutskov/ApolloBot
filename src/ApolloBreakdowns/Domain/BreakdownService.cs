@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using ApolloBreakdowns.Api;
 using ApolloBreakdowns.Data;
+using ApolloBreakdowns.Telegram;
 using Microsoft.EntityFrameworkCore;
 
 namespace ApolloBreakdowns.Domain;
@@ -42,6 +43,22 @@ public sealed class BreakdownService(ApolloDbContext db, IConfiguration config)
         finally { ProcessChanges.Release(); }
     }
 
+    private void RequireAccess(AppUser user) {
+        if (db.TestMode && !user.IsAdmin) throw new RuleException("Тестовий режим доступний лише адміністраторам.", 403);
+    }
+
+    public async Task<Breakdown> SelectTelegramModeAsync(int id, AppUser actor, long chatId, CancellationToken ct)
+    {
+        var report = await db.Breakdowns.IgnoreQueryFilters().AsNoTracking().SingleOrDefaultAsync(x => x.Id == id && x.DeletedAt == null, ct)
+            ?? throw new RuleException("Заявку не знайдено.", 404);
+        if (report.IsTest && !actor.IsAdmin) throw new RuleException("Тестові заявки доступні лише адміністраторам.", 403);
+        var expected = TelegramDestinations.Group(config, report.IsTest);
+        if (report.IsTest && expected == 0 || expected < 0 && chatId != expected || !report.IsTest && chatId == TelegramDestinations.Group(config, true))
+            throw new RuleException("Кнопка заявки недоступна в цьому чаті.", 403);
+        db.TestMode = report.IsTest;
+        return report;
+    }
+
     public Task<Breakdown> FindAsync(int id, CancellationToken ct) => FindReportAsync(id, ct);
     private async Task<Breakdown> FindReportAsync(int id, CancellationToken ct) =>
         await db.Breakdowns.SingleOrDefaultAsync(x => x.Id == id, ct) ?? throw new RuleException("Заявку не знайдено.", 404);
@@ -51,9 +68,11 @@ public sealed class BreakdownService(ApolloDbContext db, IConfiguration config)
 
     private async Task<Breakdown> SubmitCoreAsync(SubmitBreakdown input, AppUser user, CancellationToken ct)
     {
+        RequireAccess(user);
+        if (db.TestMode && config["Telegram:Mode"] != "Demo") TelegramDestinations.RequireTestGroup(config);
         input = input with { Person = (input.Person ?? "").Trim(), Description = (input.Description ?? "").Trim() };
         var fingerprint = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(input))));
-        var previous = await db.Breakdowns.IgnoreQueryFilters().SingleOrDefaultAsync(x => x.TelegramUserId == user.Id && x.RequestId == input.RequestId, ct);
+        var previous = await db.Breakdowns.IgnoreQueryFilters().SingleOrDefaultAsync(x => x.IsTest == db.TestMode && x.TelegramUserId == user.Id && x.RequestId == input.RequestId, ct);
         if (previous is not null) return SameRequest(previous, fingerprint);
         if (input.RequestType is not (Emergency or Productivity)) throw new RuleException("Оберіть тип заявки: аварійна або зниження продуктивності.");
         if (input.RequestId == Guid.Empty) throw new RuleException("Відсутній ідентифікатор заявки.");
@@ -73,7 +92,7 @@ public sealed class BreakdownService(ApolloDbContext db, IConfiguration config)
         if (new[] { part, node, fault }.Any(x => x.RequiresDescription) && input.Description.Length == 0)
             throw new RuleException("Для варіанта «Інше» додайте опис несправності.");
         var report = new Breakdown {
-            RequestId = input.RequestId, Fingerprint = fingerprint, TelegramUserId = user.Id, TelegramName = user.Name,
+            IsTest = db.TestMode, RequestId = input.RequestId, Fingerprint = fingerprint, TelegramUserId = user.Id, TelegramName = user.Name,
             Site = site.Label, Shift = shift.Label, Person = input.Person, Machine = machine.Label,
             Part = part.Label, Node = node.Label, Fault = fault.Label, Description = input.Description,
             RepairMethod = repair.Label, RequiresRepairStart = repair.RequiresRepairStart, RequestType = input.RequestType, HasReserveApollo = input.RequestType == Emergency ? input.HasReserveApollo : null
@@ -85,7 +104,7 @@ public sealed class BreakdownService(ApolloDbContext db, IConfiguration config)
         catch (DbUpdateException)
         {
             db.ChangeTracker.Clear();
-            previous = await db.Breakdowns.IgnoreQueryFilters().SingleOrDefaultAsync(x => x.TelegramUserId == user.Id && x.RequestId == input.RequestId, ct);
+            previous = await db.Breakdowns.IgnoreQueryFilters().SingleOrDefaultAsync(x => x.IsTest == db.TestMode && x.TelegramUserId == user.Id && x.RequestId == input.RequestId, ct);
             if (previous is null) throw;
             return SameRequest(previous, fingerprint);
         }
@@ -100,8 +119,9 @@ public sealed class BreakdownService(ApolloDbContext db, IConfiguration config)
 
     public async Task DeleteAsync(int id, AppUser actor, CancellationToken ct)
     {
+        RequireAccess(actor);
         if (!actor.IsAdmin) throw new RuleException("Видаляти заявки може лише адміністратор.", 403);
-        var report = await db.Breakdowns.IgnoreQueryFilters().SingleOrDefaultAsync(x => x.Id == id, ct)
+        var report = await db.Breakdowns.IgnoreQueryFilters().SingleOrDefaultAsync(x => x.Id == id && x.IsTest == db.TestMode, ct)
             ?? throw new RuleException("Заявку не знайдено.", 404);
         if (report.DeletedAt is not null) return;
         var now = DateTimeOffset.UtcNow;
@@ -119,6 +139,7 @@ public sealed class BreakdownService(ApolloDbContext db, IConfiguration config)
 
     private async Task<Breakdown> RestoreCoreAsync(int id, AppUser user, CancellationToken ct)
     {
+        RequireAccess(user);
         var report = await db.Breakdowns.SingleOrDefaultAsync(x => x.Id == id, ct) ?? throw new RuleException("Заявку не знайдено.", 404);
         await db.Entry(report).ReloadAsync(ct);
         if (report.DeletedAt is not null) throw new RuleException("Заявку видалено адміністратором.", 404);
@@ -145,6 +166,7 @@ public sealed class BreakdownService(ApolloDbContext db, IConfiguration config)
 
     public async Task<Breakdown> StartRepairAsync(int id, AppUser user, CancellationToken ct)
     {
+        RequireAccess(user);
         var report = await db.Breakdowns.SingleOrDefaultAsync(x => x.Id == id, ct) ?? throw new RuleException("Заявку не знайдено.", 404);
         if (report.RestoredAt is not null) throw new RuleException("Заявку вже завершено.", 409);
         if (!report.RequiresRepairStart) throw new RuleException("Для цієї служби початок ремонту не фіксується.");
@@ -167,12 +189,12 @@ public sealed class BreakdownService(ApolloDbContext db, IConfiguration config)
     private List<Notification> AddNotifications(Breakdown report, string kind, string text)
     {
         var targets = new List<long>();
-        if (kind != "repairStarted") targets.Add(report.TelegramUserId);
-        var group = config.GetValue<long>("Telegram:GroupChatId");
+        if (!report.IsTest && kind != "repairStarted") targets.Add(report.TelegramUserId);
+        var group = TelegramDestinations.Group(config, report.IsTest);
         if (group < 0) targets.Add(group);
         var items = targets.Distinct().Select(chat => new Notification {
             Breakdown = report, ChatId = chat, Kind = kind,
-            Text = chat > 0 ? (kind == "new" ? "Заявка прийнята." : "Роботу відновлено.") : text,
+            Text = report.IsTest ? "🧪 ТЕСТОВА ЗАЯВКА\n" + text : chat > 0 ? (kind == "new" ? "Заявка прийнята." : "Роботу відновлено.") : text,
             SentAt = config["Telegram:Mode"] == "Demo" ? DateTimeOffset.UtcNow : null
         }).ToList();
         db.Notifications.AddRange(items);

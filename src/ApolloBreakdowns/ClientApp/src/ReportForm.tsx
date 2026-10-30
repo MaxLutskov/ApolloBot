@@ -6,12 +6,13 @@ type Form = { requestType: string; requestId: string; siteId: string; shiftId: s
 const blank = (): Form => ({ requestType: '', requestId: crypto.randomUUID(), siteId: '', shiftId: '', person: '', machineId: '', partId: '', nodeId: '', faultId: '', description: '', repairMethodId: '', hasReserveApollo: '' })
 type Receipt = { requestType: string; id: number; requestId: string; createdAt: string }
 
-export default function ReportForm({ user, options, reloadOptions, onHistory }: { user: User; options: Option[]; reloadOptions(): Promise<void>; onHistory(): void }) {
-  const draftKey = `apollo-draft-${user.id}`
+export default function ReportForm({ user, options, reloadOptions, onHistory, testMode, onBusyChange }: { testMode: boolean; onBusyChange(busy: boolean): void; user: User; options: Option[]; reloadOptions(): Promise<void>; onHistory(): void }) {
+  const draftKey = `apollo-draft-${user.id}-${testMode ? "test" : "live"}`
   const [form, setForm] = useState<Form>(() => {
-    try { const saved = JSON.parse(sessionStorage.getItem(draftKey) ?? 'null'); return saved && typeof saved.requestId === 'string' ? { ...blank(), ...saved } : blank() } catch { return blank() }
+    try { const saved = JSON.parse(sessionStorage.getItem(draftKey) ?? (!testMode ? sessionStorage.getItem(`apollo-draft-${user.id}`) : null) ?? 'null'); return saved && typeof saved.requestId === 'string' ? { ...blank(), ...saved } : blank() } catch { return blank() }
   })
   const [busy, setBusy] = useState(false)
+  useEffect(() => { onBusyChange(busy) }, [busy, onBusyChange])
   const locked = useRef(false)
   const [error, setError] = useState('')
   const [validated, setValidated] = useState(false)
@@ -49,7 +50,7 @@ export default function ReportForm({ user, options, reloadOptions, onHistory }: 
       if (e instanceof ApiError && e.status === 409) await reloadOptions().catch(() => {})
     } finally { locked.current = false; setBusy(false) }
   }
-  if (receipt) return <section className="card receipt" aria-live="polite"><div className="success-icon">✓</div><div className="eyebrow">ЗБЕРЕЖЕНО В ЖУРНАЛІ</div><h2>Заявку №{receipt.id} отримано</h2><p>{receipt.requestType === 'productivity' ? 'Зниження продуктивності зафіксовано без нарахування простою.' : 'Відлік простою машини розпочато.'} В особистий чат надійде підтвердження. Стан заявки можна змінити у спільному журналі або в повідомленні групи APOLLO.</p><div className="receipt-details"><span>Зареєстровано<strong>{dateText(receipt.createdAt)}</strong></span><span>Код заявки<strong>{receipt.requestId.slice(0, 8)}</strong></span></div><div className="actions"><button onClick={reset}>Зареєструвати ще одну</button><button className="secondary" onClick={onHistory}>Відкрити журнал</button></div></section>
+  if (receipt) return <section className="card receipt" aria-live="polite"><div className="success-icon">✓</div><div className="eyebrow">{testMode ? 'ЗБЕРЕЖЕНО В ТЕСТОВОМУ ЖУРНАЛІ' : 'ЗБЕРЕЖЕНО В ЖУРНАЛІ'}</div><h2>Заявку №{receipt.id} отримано</h2><p>{receipt.requestType === 'productivity' ? 'Зниження продуктивності зафіксовано без нарахування простою.' : 'Відлік простою машини розпочато.'} {testMode ? 'Тестове повідомлення надійде в окрему групу.' : 'В особистий чат надійде підтвердження.'} Стан заявки можна змінити у спільному журналі або в повідомленні групи APOLLO.</p><div className="receipt-details"><span>Зареєстровано<strong>{dateText(receipt.createdAt)}</strong></span><span>Код заявки<strong>{receipt.requestId.slice(0, 8)}</strong></span></div><div className="next-request"><p>Створіть також заявку в іншому боті:</p><a className="bot-link" href="https://t.me/mhp_sm_bot" target="_blank" rel="noopener noreferrer" onClick={event => { if (window.Telegram?.WebApp.openTelegramLink) { event.preventDefault(); window.Telegram.WebApp.openTelegramLink('https://t.me/mhp_sm_bot') } }}>Перейти до MHP SM — створити іншу заявку ↗</a></div><div className="actions"><button onClick={reset}>Зареєструвати ще одну</button><button className="secondary" onClick={onHistory}>Відкрити журнал</button></div></section>
 
   return <div className="form-layout"><form className="card report-form" onSubmit={submit} noValidate>
     <div className="card-heading"><div><div className="eyebrow">НОВА РЕЄСТРАЦІЯ</div><h2>Повідомити про поломку</h2></div><span className="badge">APOLLO</span></div>

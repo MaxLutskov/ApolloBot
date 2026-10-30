@@ -137,6 +137,9 @@ namespace ApolloBreakdowns.Data.Migrations
                     b.Property<bool?>("HasReserveApollo")
                         .HasColumnType("bit");
 
+                    b.Property<bool>("IsTest")
+                        .HasColumnType("bit");
+
                     b.Property<string>("Machine")
                         .IsRequired()
                         .HasMaxLength(300)
@@ -221,7 +224,7 @@ namespace ApolloBreakdowns.Data.Migrations
 
                     b.HasIndex("TelegramUserId", "CreatedAt");
 
-                    b.HasIndex("TelegramUserId", "RequestId")
+                    b.HasIndex("IsTest", "TelegramUserId", "RequestId")
                         .IsUnique();
 
                     b.ToTable("Breakdowns", "apollo");
@@ -398,6 +401,9 @@ namespace ApolloBreakdowns.Data.Migrations
                         .HasColumnType("datetimeoffset");
 
                     b.Property<bool>("Deleted")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsTest")
                         .HasColumnType("bit");
 
                     b.Property<string>("Time")

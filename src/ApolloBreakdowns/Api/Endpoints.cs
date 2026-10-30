@@ -17,7 +17,7 @@ public static class Endpoints
     public static void MapAppApi(this WebApplication app)
     {
         var api = app.MapGroup("/api/app").RequireRateLimiting("api");
-        api.MapGet("/me", (HttpContext ctx, IConfiguration cfg, ApolloDbContext db) => Results.Ok(new { user = User(ctx), demo = cfg["Telegram:Mode"] == "Demo", temporaryStorage = db.Database.IsInMemory() }));
+        api.MapGet("/me", (HttpContext ctx, IConfiguration cfg, ApolloDbContext db) => Results.Ok(new { user = User(ctx), demo = cfg["Telegram:Mode"] == "Demo", temporaryStorage = db.Database.IsInMemory(), testMode = db.TestMode, testChatConfigured = Telegram.TelegramDestinations.Group(cfg, true) < 0 }));
         api.MapGet("/options", async (HttpContext ctx, ApolloDbContext db, CancellationToken ct) => {
             var query = db.Options.AsNoTracking().Where(x => !x.Deleted);
             if (!User(ctx).IsAdmin) query = query.Where(x => x.Active);
@@ -25,14 +25,14 @@ public static class Endpoints
         });
         api.MapPost("/breakdowns", async (SubmitBreakdown input, HttpContext ctx, BreakdownService service, CancellationToken ct) => {
             var result = await service.SubmitAsync(input, User(ctx), ct);
-            return Results.Ok(new { result.Id, result.RequestId, result.CreatedAt, result.RequestType, message = "Заявку успішно збережено" });
+            return Results.Ok(new { result.Id, result.RequestId, result.CreatedAt, result.RequestType, result.IsTest, message = "Заявку успішно збережено" });
         });
         api.MapGet("/breakdowns", async (HttpContext ctx, ApolloDbContext db, int? page, CancellationToken ct) => {
             var q = db.Breakdowns.AsNoTracking();
             var p = Math.Clamp(page ?? 1, 1, 100000);
             var items = await q.OrderByDescending(x => x.CreatedAt).ThenByDescending(x => x.Id).Skip((p - 1) * 20).Take(20).ToListAsync(ct);
             return Results.Ok(new { total = await q.CountAsync(ct), page = p, pageSize = 20, serverTime = DateTimeOffset.UtcNow,
-                items = items.Select(x => new { x.Id, x.Site, x.Shift, x.Person, x.Machine, x.Part, x.Node, x.Fault, x.Description,
+                items = items.Select(x => new { x.Id, x.IsTest, x.Site, x.Shift, x.Person, x.Machine, x.Part, x.Node, x.Fault, x.Description,
                     x.RepairMethod, x.RequestType, x.ProcessRestoredAt, x.ProcessRestoredByBreakdownId, x.HasReserveApollo, x.RequiresRepairStart, x.RepairStartedAt, x.RepairStartedByUserId, x.CreatedAt, x.RestoredAt, x.RestoredByUserId,
                     downtimeSeconds = BreakdownService.DowntimeSeconds(x, DateTimeOffset.UtcNow),
                     processDowntimeSeconds = BreakdownService.ProcessDowntimeSeconds(x, DateTimeOffset.UtcNow),
@@ -52,15 +52,19 @@ public static class Endpoints
             var report = await service.StartRepairAsync(id, User(ctx), ct);
             return Results.Ok(new { report.Id, report.RepairStartedAt });
         });
-        api.MapGet("/export", async (ApolloDbContext db, CancellationToken ct) => Results.File(await HistoryExport.BuildAsync(db, ct), "text/csv; charset=utf-8", "Apollo-history.csv"));
+        api.MapGet("/export", async (ApolloDbContext db, CancellationToken ct) => Results.File(await HistoryExport.BuildAsync(db, ct), "text/csv; charset=utf-8", db.TestMode ? "Apollo-test-history.csv" : "Apollo-history.csv"));
         api.MapPost("/export/send", async (ApolloDbContext db, HttpContext ctx, Telegram.TelegramClient telegram, IConfiguration cfg, CancellationToken ct) => {
             if (cfg["Telegram:Mode"] == "Demo") throw new RuleException("У тестовому режимі використайте завантаження CSV.");
-            try { await telegram.SendDocumentAsync(User(ctx).Id, await HistoryExport.BuildAsync(db, ct), ct); }
-            catch (Telegram.TelegramException) { throw new RuleException("Не вдалося надіслати CSV. Відкрийте особистий чат із ботом, натисніть Start і повторіть спробу.", 502); }
-            return Results.Ok(new { message = "CSV надіслано в особистий чат із ботом." });
+            try { await telegram.SendDocumentAsync(db.TestMode ? Telegram.TelegramDestinations.RequireTestGroup(cfg) : User(ctx).Id, await HistoryExport.BuildAsync(db, ct), ct, db.TestMode); }
+            catch (Telegram.TelegramException) { throw new RuleException(db.TestMode ? "Не вдалося надіслати CSV у тестову групу. Перевірте Telegram__TestGroupChatId та доступ бота до групи." : "Не вдалося надіслати CSV. Відкрийте особистий чат із ботом, натисніть Start і повторіть спробу.", 502); }
+            return Results.Ok(new { message = db.TestMode ? "CSV надіслано в тестову групу." : "CSV надіслано в особистий чат із ботом." });
         });
         var admin = api.MapGroup("/admin").AddEndpointFilter(async (context, next) => {
             if (!User(context.HttpContext).IsAdmin) return Results.StatusCode(403);
+            var request = context.HttpContext.Request;
+            var db = context.HttpContext.RequestServices.GetRequiredService<ApolloDbContext>();
+            if (db.TestMode && request.Method != "GET" && !request.Path.StartsWithSegments("/api/app/admin/reminders"))
+                throw new RuleException("Довідники та права користувачів змінюються лише в робочому режимі. У тестовому режимі вони доступні для перегляду.", 403);
             return await next(context);
         });
         admin.MapPost("/options", async (SaveOption input, HttpContext ctx, ApolloDbContext db, CancellationToken ct) => {
@@ -90,11 +94,11 @@ public static class Endpoints
             return Results.Ok(Dto(option));
         });
         admin.MapGet("/notifications", async (ApolloDbContext db, CancellationToken ct) => Results.Ok(new {
-            pending = await db.Notifications.CountAsync(x => x.SentAt == null && x.CancelledAt == null, ct),
-            delayed = await db.Notifications.CountAsync(x => x.SentAt == null && x.CancelledAt == null && x.Attempts > 0, ct)
+            pending = await db.Notifications.CountAsync(x => x.Breakdown.IsTest == db.TestMode && x.SentAt == null && x.CancelledAt == null, ct),
+            delayed = await db.Notifications.CountAsync(x => x.Breakdown.IsTest == db.TestMode && x.SentAt == null && x.CancelledAt == null && x.Attempts > 0, ct)
         }));
         admin.MapGet("/audit", async (ApolloDbContext db, CancellationToken ct) => Results.Ok(await db.Audit.AsNoTracking().OrderByDescending(x => x.Id).Take(100).ToListAsync(ct)));
-        admin.MapGet("/export", async (ApolloDbContext db, CancellationToken ct) => Results.File(await HistoryExport.BuildAsync(db, ct), "text/csv; charset=utf-8", "Apollo-history.csv"));
+        admin.MapGet("/export", async (ApolloDbContext db, CancellationToken ct) => Results.File(await HistoryExport.BuildAsync(db, ct), "text/csv; charset=utf-8", db.TestMode ? "Apollo-test-history.csv" : "Apollo-history.csv"));
         admin.MapDelete("/options/{id:int}", async (int id, Guid version, ApolloDbContext db, HttpContext ctx, CancellationToken ct) => {
             var all = await db.Options.Where(x => !x.Deleted).ToListAsync(ct);
             var option = all.SingleOrDefault(x => x.Id == id) ?? throw new RuleException("Варіант не знайдено.", 404);
@@ -123,13 +127,13 @@ public static class Endpoints
         admin.MapPost("/reminders", async (SaveReminder input, ApolloDbContext db, CancellationToken ct) => {
             ValidateReminder(input);
             if (await db.Reminders.AnyAsync(x => !x.Deleted && x.Time == input.Time, ct)) throw new RuleException("Цей час уже є у розкладі.", 409);
-            var reminder = new ReminderSchedule { Time = input.Time, Active = input.Active };
+            var reminder = new ReminderSchedule { IsTest = db.TestMode, Time = input.Time, Active = input.Active };
             db.Reminders.Add(reminder); await db.SaveChangesAsync(ct);
             return Results.Ok(reminder);
         });
         admin.MapPut("/reminders/{id:int}", async (int id, SaveReminder input, ApolloDbContext db, CancellationToken ct) => {
             ValidateReminder(input);
-            var reminder = await db.Reminders.FindAsync([id], ct) ?? throw new RuleException("Розсилку не знайдено.", 404);
+            var reminder = await db.Reminders.SingleOrDefaultAsync(x => x.Id == id, ct) ?? throw new RuleException("Розсилку не знайдено.", 404);
             if (reminder.Deleted) throw new RuleException("Розсилку видалено.", 404);
             if (reminder.Version != input.Version) throw new RuleException("Розклад змінився. Оновіть сторінку.", 409);
             if (await db.Reminders.AnyAsync(x => x.Id != id && !x.Deleted && x.Time == input.Time, ct)) throw new RuleException("Цей час уже є у розкладі.", 409);
@@ -137,7 +141,7 @@ public static class Endpoints
             await SaveReminderChanges(db, ct); return Results.Ok(reminder);
         });
         admin.MapDelete("/reminders/{id:int}", async (int id, Guid version, ApolloDbContext db, CancellationToken ct) => {
-            var reminder = await db.Reminders.FindAsync([id], ct) ?? throw new RuleException("Розсилку не знайдено.", 404);
+            var reminder = await db.Reminders.SingleOrDefaultAsync(x => x.Id == id, ct) ?? throw new RuleException("Розсилку не знайдено.", 404);
             if (reminder.Version != version) throw new RuleException("Розклад змінився. Оновіть сторінку.", 409);
             reminder.Deleted = true; reminder.Active = false; reminder.Version = Guid.NewGuid();
             await SaveReminderChanges(db, ct); return Results.Ok(new { deleted = true });

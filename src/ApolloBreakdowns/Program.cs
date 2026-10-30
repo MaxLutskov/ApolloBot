@@ -72,6 +72,13 @@ app.Use(async (ctx, next) => {
         var allowed = builder.Configuration.GetSection("Telegram:AllowedUserIds").Get<long[]>() ?? [];
         if (allowed.Length > 0 && !allowed.Contains(user.Id) && !user.IsAdmin) { ctx.Response.StatusCode = 403; return; }
         ctx.Items["User"] = user;
+        var requestedMode = ctx.Request.Headers["X-Apollo-Test-Mode"].ToString();
+        var testRequested = false;
+        if (requestedMode.Length > 0 && !bool.TryParse(requestedMode, out testRequested)) throw new RuleException("Невідомий режим заявки.");
+        if (testRequested) {
+            if (!user.IsAdmin) throw new RuleException("Тестовий режим доступний лише адміністраторам.", 403);
+            ctx.RequestServices.GetRequiredService<ApolloDbContext>().TestMode = true;
+        }
     }
     await next();
 });

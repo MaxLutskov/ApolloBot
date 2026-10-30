@@ -18,6 +18,8 @@ public sealed class ReminderWorker(IServiceScopeFactory scopes, StorageRuntime s
             var service = scope.ServiceProvider.GetRequiredService<ReminderService>();
             var telegram = scope.ServiceProvider.GetRequiredService<TelegramClient>();
             await service.QueueDueAsync(DateTimeOffset.UtcNow, ct);
+            db.TestMode = true;
+            await service.QueueDueAsync(DateTimeOffset.UtcNow, ct);
             var now = DateTimeOffset.UtcNow;
             var pending = await db.ReminderDeliveries.Where(x => x.SentAt == null && x.NextAttemptAt <= now).Take(10).ToListAsync(ct);
             foreach (var item in pending)
@@ -27,7 +29,9 @@ public sealed class ReminderWorker(IServiceScopeFactory scopes, StorageRuntime s
                 catch (DbUpdateConcurrencyException) { db.Entry(item).State = EntityState.Detached; continue; }
                 try
                 {
-                    var enabled = await db.Reminders.AnyAsync(x => x.Id == item.ScheduleId && x.Active && !x.Deleted, ct);
+                    var schedule = await db.Reminders.IgnoreQueryFilters().AsNoTracking().SingleAsync(x => x.Id == item.ScheduleId, ct);
+                    db.TestMode = schedule.IsTest;
+                    var enabled = schedule.Active && !schedule.Deleted && TelegramDestinations.Group(config, schedule.IsTest) == item.ChatId;
                     var text = enabled ? await service.BuildTextAsync(now, ct) : null;
                     // Recheck open reports before retries: never send an empty or outdated reminder.
                     if (text is not null) await telegram.SendAsync(item.ChatId, text, ct);

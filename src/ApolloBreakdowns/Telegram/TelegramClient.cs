@@ -28,13 +28,13 @@ public sealed class TelegramClient(HttpClient http, IConfiguration config, Break
         text = startRepair ? "🔧 Почато ремонт" : "✅ Проблему вирішено", callback_data = $"{(startRepair ? "start" : "restore")}:{reportId}"
     } } } };
 
-    public async Task SendDocumentAsync(long chatId, byte[] bytes, CancellationToken ct)
+    public async Task SendDocumentAsync(long chatId, byte[] bytes, CancellationToken ct, bool testMode = false)
     {
         using var content = new MultipartFormDataContent();
         content.Add(new StringContent(chatId.ToString(System.Globalization.CultureInfo.InvariantCulture)), "chat_id");
         var document = new ByteArrayContent(bytes);
         document.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("text/csv");
-        content.Add(document, "document", "Apollo-history.csv");
+        content.Add(document, "document", testMode ? "Apollo-test-history.csv" : "Apollo-history.csv");
         using var response = await http.PostAsync($"https://api.telegram.org/bot{config["Telegram:BotToken"]}/sendDocument", content, ct);
         if (!response.IsSuccessStatusCode) throw new TelegramException((int)response.StatusCode);
         using var result = await response.Content.ReadFromJsonAsync<JsonDocument>(cancellationToken: ct);
@@ -108,6 +108,7 @@ public sealed class TelegramClient(HttpClient http, IConfiguration config, Break
                     await DismissConfirmationAsync(chatId, messageId, ct);
                     return;
                 }
+                await breakdowns.SelectTelegramModeAsync(confirmation.ReportId, actor, chatId, ct);
                 var report = confirmation.Start ? await breakdowns.StartRepairAsync(confirmation.ReportId, actor, ct) : await breakdowns.RestoreAsync(confirmation.ReportId, actor, ct);
                 text = confirmation.Start ? "Початок ремонту зафіксовано." : $"Роботу відновлено. Простій машини: {BreakdownService.MachineDowntimeMinutes(report, DateTimeOffset.UtcNow)} хв; процесу: {BreakdownService.ProcessDowntimeMinutes(report, DateTimeOffset.UtcNow)} хв.";
                 await DismissConfirmationAsync(chatId, messageId, ct);
@@ -118,14 +119,14 @@ public sealed class TelegramClient(HttpClient http, IConfiguration config, Break
                 var parts = data.Split(':');
                 if (parts is not { Length: 2 } || parts[0] is not ("restore" or "start") || !int.TryParse(parts[1], out var reportId)) return;
                 var start = parts[0] == "start";
-                var report = await breakdowns.FindAsync(reportId, ct);
+                var report = await breakdowns.SelectTelegramModeAsync(reportId, actor, chatId, ct);
                 if (report.RestoredAt is not null) throw new RuleException("Заявку вже завершено.");
                 if (start && (!report.RequiresRepairStart || report.RepairStartedAt is not null)) throw new RuleException("Починати ремонт повторно не потрібно.");
                 if (!start && report.RequiresRepairStart && report.RepairStartedAt is null) throw new RuleException("Спочатку зафіксуйте початок ремонту.");
                 var token = new ActionConfirmation(reportId, userId, chatId, messageId, start).Sign(config["Telegram:BotToken"] ?? "", DateTimeOffset.UtcNow);
                 await CallAsync("sendMessage", new {
                     chat_id = chatId,
-                    text = $"{actor.Name}, підтвердьте {(start ? "початок ремонту" : "завершення робіт")} за заявкою №{reportId}\n{report.Machine} · {report.Site}" +
+                    text = (report.IsTest ? "🧪 ТЕСТ\n" : "") + $"{actor.Name}, підтвердьте {(start ? "початок ремонту" : "завершення робіт")} за заявкою №{reportId}\n{report.Machine} · {report.Site}" +
                         (start ? "" : "\nБуде завершено поточний простій процесу для всіх APOLLO без резерву."),
                     reply_markup = new { inline_keyboard = new[] { new[] {
                         new { text = "✅ Підтвердити", callback_data = "ok:" + token },

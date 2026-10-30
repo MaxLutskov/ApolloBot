@@ -21,6 +21,7 @@ public sealed class FieldOption
 
 public sealed class Breakdown
 {
+    public bool IsTest { get; set; }
     public int Id { get; set; }
     public Guid RequestId { get; set; }
     public string Fingerprint { get; set; } = "";
@@ -97,6 +98,7 @@ public sealed class BotUser
 
 public sealed class ReminderSchedule
 {
+    public bool IsTest { get; set; }
     public int Id { get; set; }
     public string Time { get; set; } = "07:00";
     public bool Active { get; set; } = true;
@@ -120,6 +122,7 @@ public sealed class ReminderDelivery
 
 public sealed class ApolloDbContext(DbContextOptions<ApolloDbContext> options) : DbContext(options)
 {
+    public bool TestMode { get; set; }
     public const string Schema = "apollo";
     public DbSet<FieldOption> Options => Set<FieldOption>();
     public DbSet<Breakdown> Breakdowns => Set<Breakdown>();
@@ -166,6 +169,7 @@ public sealed class ApolloDbContext(DbContextOptions<ApolloDbContext> options) :
             e.Property(x => x.Version).IsConcurrencyToken();
         });
         b.Entity<ReminderSchedule>(e => {
+            e.HasQueryFilter(x => x.IsTest == TestMode);
             e.Property(x => x.Time).HasMaxLength(5);
             e.Property(x => x.Version).IsConcurrencyToken();
         });
@@ -186,8 +190,8 @@ public sealed class ApolloDbContext(DbContextOptions<ApolloDbContext> options) :
             e.HasOne(x => x.Parent).WithMany().HasForeignKey(x => x.ParentId).OnDelete(DeleteBehavior.Restrict);
         });
         b.Entity<Breakdown>(e => {
-            e.HasQueryFilter(x => x.DeletedAt == null);
-            e.HasIndex(x => new { x.TelegramUserId, x.RequestId }).IsUnique();
+            e.HasQueryFilter(x => x.DeletedAt == null && x.IsTest == TestMode);
+            e.HasIndex(x => new { x.IsTest, x.TelegramUserId, x.RequestId }).IsUnique();
             e.HasIndex(x => new { x.TelegramUserId, x.CreatedAt });
             e.Property(x => x.RequestType).HasMaxLength(20).HasDefaultValue("emergency");
             e.HasIndex(x => new { x.RequestType, x.ProcessRestoredAt });

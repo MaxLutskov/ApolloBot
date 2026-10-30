@@ -134,6 +134,27 @@ try {
     $remaining = (Request '/breakdowns' $operator).Content | ConvertFrom-Json
     Assert ($remaining.total -eq 1 -and -not ($remaining.items | Where-Object id -eq $report.id)) 'Deleted report disappears for every user'
     Assert ((Request "/breakdowns/$($report.id)/restore" $admin 'POST').StatusCode -eq 404) 'Deleted report cannot be restored by old buttons'
+    $testAdmin = @{ 'X-Demo-User-Id' = '1'; 'X-Apollo-Test-Mode' = 'true' }
+    $testOperator = @{ 'X-Demo-User-Id' = '2'; 'X-Apollo-Test-Mode' = 'true' }
+    Assert ((Request '/me' $testOperator).StatusCode -eq 403) 'Operator cannot enter test mode'
+    Assert (((Request '/me' $testAdmin).Content | ConvertFrom-Json).testMode) 'Admin can select test mode per request'
+    Assert (((Request '/breakdowns' $testAdmin).Content | ConvertFrom-Json).total -eq 0) 'Test history initially hides all production reports'
+    $testBody = $body.Clone(); $testBody.requestId = [guid]::NewGuid().ToString(); $testBody.description = 'ISOLATED-TEST-REPORT'
+    $testReport = (Request '/breakdowns' $testAdmin 'POST' $testBody).Content | ConvertFrom-Json
+    Assert ($testReport.isTest -and $testReport.id -gt 0) 'Admin creates separately marked test report'
+    Assert (((Request '/breakdowns' $operator).Content | ConvertFrom-Json).total -eq 1) 'Production users do not see test reports'
+    Assert ((Request "/breakdowns/$($testReport.id)/start-repair" $admin 'POST').StatusCode -eq 404) 'Production mode cannot start a test repair'
+    Assert ((Request "/breakdowns/$($other.id)" $testAdmin 'DELETE').StatusCode -eq 404) 'Test mode cannot delete production reports'
+    Assert ((Request '/admin/options' $testAdmin 'POST' $newOption).StatusCode -eq 403) 'Test mode cannot modify shared production catalogs'
+    Assert ((Request '/admin/users/2/admin' $testAdmin 'PUT' @{ isAdmin = $true; version = [guid]::NewGuid() }).StatusCode -eq 403) 'Test mode cannot change real user permissions'
+    $testReminder = (Request '/admin/reminders' $testAdmin 'POST' @{ time = '07:00'; active = $true }).Content | ConvertFrom-Json
+    Assert ($testReminder.isTest -and ((Request '/admin/reminders' $testAdmin).Content | ConvertFrom-Json).Count -eq 1) 'Test reminders have independent schedule'
+    Assert ((Request "/admin/reminders/$($testReminder.id)" $admin 'PUT' @{ time = '08:00'; active = $true; version = $testReminder.version }).StatusCode -eq 404) 'Production cannot edit test reminder by guessed ID'
+    Assert (-not ((Request '/export' $operator).Content.Contains('ISOLATED-TEST-REPORT'))) 'Production CSV excludes test reports'
+    $testCsv = Request '/export' $testAdmin
+    Assert ($testCsv.Content.Contains('ISOLATED-TEST-REPORT') -and ($testCsv.Headers['Content-Disposition'] -join ',').Contains('Apollo-test-history.csv')) 'Test CSV uses isolated data and distinct filename'
+    Assert ((Request "/breakdowns/$($testReport.id)/start-repair" $testAdmin 'POST').StatusCode -eq 200) 'Admin can start repair in test mode'
+    Assert ((Request "/breakdowns/$($testReport.id)/restore" $testAdmin 'POST').StatusCode -eq 200) 'Admin can complete test repair'
     Write-Output 'All HTTP smoke checks passed.'
 } finally {
     if ($null -ne $serverProcess -and -not $serverProcess.HasExited) { Stop-Process -Id $serverProcess.Id }

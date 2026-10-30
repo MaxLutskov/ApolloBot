@@ -12,7 +12,7 @@ public sealed class ReminderService(ApolloDbContext db, IConfiguration config)
 
     public async Task QueueDueAsync(DateTimeOffset now, CancellationToken ct)
     {
-        var chat = config.GetValue<long>("Telegram:GroupChatId");
+        var chat = Telegram.TelegramDestinations.Group(config, db.TestMode);
         if (chat >= 0) return;
         var local = TimeZoneInfo.ConvertTime(now, Kyiv);
         var day = local.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
@@ -38,7 +38,7 @@ public sealed class ReminderService(ApolloDbContext db, IConfiguration config)
         var total = await db.Breakdowns.CountAsync(x => x.RestoredAt == null, ct);
         if (total == 0) return null;
         var reports = await db.Breakdowns.AsNoTracking().Where(x => x.RestoredAt == null).OrderBy(x => x.Id).Take(15).ToListAsync(ct);
-        var text = new StringBuilder($"⏰ Невиконані заявки APOLLO: {total}\n");
+        var text = new StringBuilder((db.TestMode ? "🧪 ТЕСТ\n" : "") + $"⏰ Невиконані заявки APOLLO: {total}\n");
         foreach (var r in reports)
             text.Append($"\n#{r.Id} · {Short(r.Site, 40)} · {Short(r.Machine, 40)}\n{Short(r.Fault, 80)} · {BreakdownService.RequestTypeLabel(r.RequestType)}\nПростій машини: {BreakdownService.MachineDowntimeMinutes(r, now)} хв · процесу: {BreakdownService.ProcessDowntimeMinutes(r, now)} хв\n{(r.RepairStartedAt is null ? "Очікує вирішення" : "Ремонт триває")}\n");
         if (total > reports.Count) text.Append($"\nЩе {total - reports.Count} заявок — у спільному журналі.");

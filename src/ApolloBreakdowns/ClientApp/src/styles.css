@@ -13,3 +13,5 @@ button.danger { background:#b42332; color:white; }
 .report-delete .error-box { margin-top: 12px; }
 
 .request-type{margin-bottom:26px}
+
+.mode-selector{max-width:320px;margin-top:20px}.next-request{margin-top:24px;padding:18px;background:#eef5f9;border-radius:9px}.next-request p{margin-top:0}.bot-link{display:inline-block;padding:13px 18px;border-radius:8px;background:var(--navy);color:white;text-decoration:none;font-weight:650;font-size:14px}.bot-link:hover{background:#214862}.bot-link:focus-visible{outline:3px solid #83bddb;outline-offset:2px}

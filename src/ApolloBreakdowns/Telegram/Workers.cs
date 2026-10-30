@@ -68,7 +68,7 @@ public sealed class NotificationWorker(IServiceScopeFactory scopes, IConfigurati
                     catch (DbUpdateConcurrencyException) { db.Entry(item).State = EntityState.Detached; continue; }
                     try {
                         var report = await db.Breakdowns.IgnoreQueryFilters().AsNoTracking().SingleAsync(x => x.Id == item.BreakdownId, ct);
-                        if (report.DeletedAt is not null) item.CancelledAt = DateTimeOffset.UtcNow;
+                        if (report.DeletedAt is not null || report.IsTest && item.ChatId != TelegramDestinations.Group(config, true)) item.CancelledAt = DateTimeOffset.UtcNow;
                         else {
                             await telegram.SendNotificationAsync(item.ChatId, item.Text, item.BreakdownId, report.RestoredAt is null && (item.Kind is "new" or "repairStarted"), ct, report.RequiresRepairStart && report.RepairStartedAt is null);
                             item.SentAt = DateTimeOffset.UtcNow;

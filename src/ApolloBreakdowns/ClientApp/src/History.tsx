@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { api, dateText, headers, type Page } from './api'
 import { durationText, reportDowntimeText } from './form.mjs'
 
-export default function History({ demo, admin }: { demo: boolean; admin: boolean }) {
+export default function History({ demo, admin, testMode }: { demo: boolean; admin: boolean; testMode: boolean }) {
   const [data, setData] = useState<Page | null>(null)
   const [page, setPage] = useState(1)
   const [busy, setBusy] = useState(false)
@@ -54,12 +54,12 @@ export default function History({ demo, admin }: { demo: boolean; admin: boolean
       const response = await fetch('/api/app/export', { headers: headers() })
       if (!response.ok) throw new Error('Не вдалося експортувати журнал. Перевірте доступ та повторіть спробу.')
       const url = URL.createObjectURL(await response.blob())
-      const link = document.createElement('a'); link.href = url; link.download = 'Поломки_APOLLO.csv'; document.body.appendChild(link); link.click(); link.remove()
+      const link = document.createElement('a'); link.href = url; link.download = testMode ? 'Тестові_поломки_APOLLO.csv' : 'Поломки_APOLLO.csv'; document.body.appendChild(link); link.click(); link.remove()
       setTimeout(() => URL.revokeObjectURL(url), 60000)
     } catch (e) { setError((e as Error).message) }
     finally { setExporting(false) }
   }
-  return <section className="card history"><div className="card-heading"><div><div className="eyebrow">ІСТОРІЯ РЕЄСТРАЦІЙ</div><h2>Журнал усіх заявок {data && <span className="count">{data.total}</span>}</h2></div><div className="actions compact"><button disabled={busy} className="secondary" onClick={() => void load()}>Оновити</button><button disabled={exporting} className="secondary" onClick={() => void download()}>{exporting ? 'Експорт…' : 'CSV ↓'}</button></div></div>
+  return <section className="card history"><div className="card-heading"><div><div className="eyebrow">ІСТОРІЯ РЕЄСТРАЦІЙ</div><h2>{testMode ? "Журнал тестових заявок" : "Журнал усіх заявок"} {data && <span className="count">{data.total}</span>}</h2></div><div className="actions compact"><button disabled={busy} className="secondary" onClick={() => void load()}>Оновити</button><button disabled={exporting} className="secondary" onClick={() => void download()}>{exporting ? 'Експорт…' : 'CSV ↓'}</button></div></div>
     {error && <div role="alert" className="error-box">{error}</div>}
     {message && <div role="status" className="success-box">{message}</div>}
     {busy && <p role="status">Завантаження заявок…</p>}

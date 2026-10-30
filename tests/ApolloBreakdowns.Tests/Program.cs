@@ -306,10 +306,10 @@ Check(ActionConfirmation.Read(signedToken, "test-token", other.Id, -100123456, c
 Check(ActionConfirmation.Read(signedToken, "wrong-token", other.Id, -100123456, confirmationTime) is null && ActionConfirmation.Read("invalid", "test-token", other.Id, -100123456, confirmationTime) is null, "Forged and malformed confirmations are rejected");
 
 var startPromptReport = await service.SubmitAsync(input with { RequestId = Guid.NewGuid(), RepairMethodId = assisted.Id }, owner, default);
-async Task ClickAsync(string data, long actorId = 33, int messageId = 200) {
+async Task ClickAsync(string data, long actorId = 33, int messageId = 200, long chatId = -100123456) {
     using var eventJson = JsonDocument.Parse(JsonSerializer.Serialize(new { callback_query = new {
         id = Guid.NewGuid().ToString(), from = new { id = actorId, first_name = "Member", is_bot = false }, data,
-        message = new { message_id = messageId, chat = new { id = -100123456L, type = "supergroup" } }
+        message = new { message_id = messageId, chat = new { id = chatId, type = "supergroup" } }
     } }));
     await telegram.HandleUpdateAsync(eventJson.RootElement, default);
 }
@@ -348,6 +348,76 @@ Check(unattendedReport.RepairStartedByUserId == owner.Id, "Another worker can co
 var firstArrival = unattendedReport.RepairStartedAt;
 await ClickAsync(unattendedConfirmation, other.Id);
 Check(unattendedReport.RepairStartedByUserId == owner.Id && unattendedReport.RepairStartedAt == firstArrival, "A late first confirmation cannot overwrite the worker who already started repair");
+
+
+// Test mode is a per-request data partition, not a global bot switch.
+config["Telegram:TestGroupChatId"] = "-100777777";
+Check(TelegramDestinations.Group(config, true) == -100777777 && TelegramDestinations.Group(config, false) == -100123456, "Test and production destinations are separate");
+config["Telegram:TestGroupChatId"] = "-100123456";
+Check(TelegramDestinations.Group(config, true) == 0, "Production group cannot be reused as test group");
+config["Telegram:TestGroupChatId"] = "malformed";
+Check(TelegramDestinations.Group(config, true) == 0, "Malformed test destination does not crash startup or leak into production");
+config["Telegram:TestGroupChatId"] = "-100777777";
+db.TestMode = false;
+var sharedRequestId = Guid.NewGuid();
+var liveModeReport = await service.SubmitAsync(input with { RequestId = sharedRequestId, Description = "LIVE-ONLY-MARKER" }, adminUser, default);
+db.TestMode = true;
+await Reject(() => service.SubmitAsync(input with { RequestId = Guid.NewGuid() }, owner, default), 403, "Only admins can submit test reports");
+var testModeReport = await service.SubmitAsync(input with { RequestId = sharedRequestId, Description = "TEST-ONLY-MARKER" }, adminUser, default);
+Check(testModeReport.IsTest && !liveModeReport.IsTest && testModeReport.Id != liveModeReport.Id, "Same request key is independently idempotent in test and production");
+Check((await service.SubmitAsync(input with { RequestId = sharedRequestId, Description = "TEST-ONLY-MARKER" }, adminUser, default)).Id == testModeReport.Id, "Test report retry does not duplicate a test report");
+var testNotifications = await db.Notifications.Where(x => x.BreakdownId == testModeReport.Id).ToListAsync();
+Check(testNotifications.Count == 1 && testNotifications.All(x => x.ChatId == -100777777 && x.Text.Contains("ТЕСТ")), "All test notifications target only the separate group and are labeled as tests");
+Check(!await db.Breakdowns.AnyAsync(x => x.Id == liveModeReport.Id) && await db.Breakdowns.AnyAsync(x => x.Id == testModeReport.Id), "Test history hides production reports");
+await Reject(() => service.RestoreAsync(liveModeReport.Id, adminUser, default), 404, "Test mode cannot restore production reports by guessed ID");
+await Reject(() => service.DeleteAsync(liveModeReport.Id, adminUser, default), 404, "Test mode cannot delete production reports by guessed ID");
+await Reject(() => service.RestoreAsync(testModeReport.Id, owner, default), 403, "A non-admin cannot restore a test report");
+var isolatedTestCsv = Encoding.UTF8.GetString(await HistoryExport.BuildAsync(db, default));
+Check(isolatedTestCsv.Contains("TEST-ONLY-MARKER") && !isolatedTestCsv.Contains("LIVE-ONLY-MARKER"), "Test CSV contains only test history");
+await service.RestoreAsync(testModeReport.Id, adminUser, default);
+Check(liveModeReport.RestoredAt is null && liveModeReport.ProcessRestoredAt is null, "Completing test repair does not restore the production machine or process");
+var nextTestReport = await service.SubmitAsync(input with { RequestId = Guid.NewGuid() }, adminUser, default);
+db.TestMode = false;
+Check(!await db.Breakdowns.AnyAsync(x => x.Id == testModeReport.Id), "Production history hides test reports");
+await Reject(() => service.RestoreAsync(nextTestReport.Id, adminUser, default), 404, "Production mode cannot restore test reports by guessed ID");
+var isolatedLiveCsv = Encoding.UTF8.GetString(await HistoryExport.BuildAsync(db, default));
+Check(isolatedLiveCsv.Contains("LIVE-ONLY-MARKER") && !isolatedLiveCsv.Contains("TEST-ONLY-MARKER"), "Production CSV excludes test data");
+await service.RestoreAsync(liveModeReport.Id, adminUser, default);
+Check(nextTestReport.RestoredAt is null && nextTestReport.ProcessRestoredAt is null, "Completing production repair does not restore the test process");
+await Reject(() => service.SelectTelegramModeAsync(nextTestReport.Id, owner, -100777777, default), 403, "Non-admin group member cannot operate test callbacks");
+await Reject(() => service.SelectTelegramModeAsync(nextTestReport.Id, adminUser, -100123456, default), 403, "Test callback is rejected in production chat");
+await service.SelectTelegramModeAsync(nextTestReport.Id, adminUser, -100777777, default);
+Check(db.TestMode, "Telegram test callbacks select test partition without switching other requests");
+var testSchedule = new ReminderSchedule { Time = "07:00", IsTest = true };
+db.Reminders.Add(testSchedule);
+await db.SaveChangesAsync();
+var reminderDay = morning.AddDays(3);
+await reminderService.QueueDueAsync(reminderDay, default);
+var testDelivery = await db.ReminderDeliveries.SingleAsync(x => x.ScheduleId == testSchedule.Id);
+Check(testDelivery.ChatId == -100777777 && testDelivery.Text.Contains("ТЕСТ") && testDelivery.Text.Contains("#" + nextTestReport.Id), "Test reminders use test reports and the separate test chat");
+Check(!await db.Reminders.AnyAsync(x => !x.IsTest), "Test reminder schedule excludes production schedules");
+db.TestMode = false;
+Check(!await db.Reminders.AnyAsync(x => x.Id == testSchedule.Id), "Production reminder schedule excludes test schedules");
+await Reject(() => service.SelectTelegramModeAsync(liveModeReport.Id, adminUser, -100777777, default), 403, "Production callback is rejected in test chat");
+config["Telegram:TestGroupChatId"] = "0";
+config["Telegram:Mode"] = "Polling";
+db.TestMode = true;
+await Reject(() => service.SubmitAsync(input with { RequestId = Guid.NewGuid() }, adminUser, default), 400, "Missing test chat blocks only test submission, not the application");
+db.TestMode = false;
+Check(await service.FindAsync(liveModeReport.Id, default) is not null, "Production remains usable when test chat is missing");
+config["Telegram:TestGroupChatId"] = "-100777777";
+
+db.TestMode = true;
+var telegramTestReport = await service.SubmitAsync(input with { RequestId = Guid.NewGuid(), RepairMethodId = assisted.Id }, adminUser, default);
+db.TestMode = false;
+await ClickAsync($"start:{telegramTestReport.Id}", adminUser.Id, chatId: -100777777);
+var testStartPrompt = handler.Calls.Last(x => x.Method == "sendMessage");
+Check(JsonDocument.Parse(testStartPrompt.Json).RootElement.GetProperty("chat_id").GetInt64() == -100777777 && db.TestMode, "Telegram test confirmation remains in test chat and selects its own data partition");
+await ClickAsync(PromptButton(0), adminUser.Id, chatId: -100777777);
+Check(telegramTestReport.RepairStartedAt is not null && telegramTestReport.IsTest, "Confirmed Telegram action can start a test repair while production remains active");
+await ClickAsync($"restore:{telegramTestReport.Id}", adminUser.Id, chatId: -100777777);
+await ClickAsync(PromptButton(0), adminUser.Id, chatId: -100777777);
+Check(telegramTestReport.RestoredAt is not null && (await db.Notifications.Where(x => x.BreakdownId == telegramTestReport.Id).ToListAsync()).All(x => x.ChatId == -100777777), "Completed Telegram test repair sends every status event only to test chat");
 
 Console.WriteLine($"{passed} checks passed.");
 
