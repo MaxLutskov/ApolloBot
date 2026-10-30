@@ -32,6 +32,11 @@ public sealed class Breakdown
     public string Shift { get; set; } = "";
     public string Person { get; set; } = "";
     public string Machine { get; set; } = "";
+    public string MachineKey { get; set; } = "";
+    public Guid? MachineDowntimeGroupId { get; set; }
+    public DateTimeOffset? MachineDowntimeStartedAt { get; set; }
+    public DateTimeOffset? MachineRestoredAt { get; set; }
+    public int? MachineRestoredByBreakdownId { get; set; }
     public string Part { get; set; } = "";
     public string Node { get; set; } = "";
     public string Fault { get; set; } = "";
@@ -193,6 +198,9 @@ public sealed class ApolloDbContext(DbContextOptions<ApolloDbContext> options) :
             e.HasQueryFilter(x => x.DeletedAt == null && x.IsTest == TestMode);
             e.HasIndex(x => new { x.IsTest, x.TelegramUserId, x.RequestId }).IsUnique();
             e.HasIndex(x => new { x.TelegramUserId, x.CreatedAt });
+            e.Property(x => x.MachineKey).HasMaxLength(350);
+            e.HasIndex(x => new { x.IsTest, x.MachineKey, x.RestoredAt });
+            e.HasIndex(x => x.MachineDowntimeGroupId);
             e.Property(x => x.RequestType).HasMaxLength(20).HasDefaultValue("emergency");
             e.HasIndex(x => new { x.RequestType, x.ProcessRestoredAt });
             e.Property(x => x.Fingerprint).HasMaxLength(64);

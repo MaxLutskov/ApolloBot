@@ -61,3 +61,9 @@ test('process timer stops independently of machine and reserve stays twenty minu
   assert.equal(reportDowntimeText({ ...report, processDowntimeRunning: true }, 300, true), '20 хв')
   assert.equal(reportDowntimeText({ ...report, hasReserveApollo: true }, 3600, true), '20 хв')
 })
+
+test('closed fault keeps ticking until the common machine episode ends', () => {
+  const report = { requestType: 'emergency', downtimeSeconds: 3600, restoredAt: '2026-10-30T10:00:00Z', machineDowntimeRunning: true }
+  assert.equal(reportDowntimeText(report, 600), '1 год 10 хв')
+  assert.equal(reportDowntimeText({ ...report, machineDowntimeRunning: false }, 600), '1 год 0 хв')
+})

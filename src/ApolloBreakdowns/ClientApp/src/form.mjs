@@ -46,6 +46,6 @@ export function reportDowntimeText(report, elapsed = 0, process = false) {
   if (report.requestType === 'productivity') return '0 хв'
   if (process && report.hasReserveApollo === true) return '20 хв'
   const seconds = process ? report.processDowntimeSeconds : report.downtimeSeconds
-  const running = process ? report.processDowntimeRunning : !report.restoredAt
+  const running = process ? report.processDowntimeRunning : (report.machineDowntimeRunning ?? !report.restoredAt)
   return downtimeText(seconds + (running ? elapsed : 0))
 }

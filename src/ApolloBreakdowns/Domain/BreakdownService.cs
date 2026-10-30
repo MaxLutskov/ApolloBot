@@ -93,10 +93,16 @@ public sealed class BreakdownService(ApolloDbContext db, IConfiguration config)
             throw new RuleException("Для варіанта «Інше» додайте опис несправності.");
         var report = new Breakdown {
             IsTest = db.TestMode, RequestId = input.RequestId, Fingerprint = fingerprint, TelegramUserId = user.Id, TelegramName = user.Name,
-            Site = site.Label, Shift = shift.Label, Person = input.Person, Machine = machine.Label,
+            Site = site.Label, Shift = shift.Label, Person = input.Person, Machine = machine.Label, MachineKey = $"option:{machine.Id}",
             Part = part.Label, Node = node.Label, Fault = fault.Label, Description = input.Description,
             RepairMethod = repair.Label, RequiresRepairStart = repair.RequiresRepairStart, RequestType = input.RequestType, HasReserveApollo = input.RequestType == Emergency ? input.HasReserveApollo : null
         };
+        if (report.RequestType == Emergency) {
+            var open = await db.Breakdowns.Where(x => x.RequestType == Emergency && x.MachineKey == report.MachineKey && x.RestoredAt == null).ToListAsync(ct);
+            var existing = open.OrderBy(x => x.MachineDowntimeStartedAt ?? x.CreatedAt).FirstOrDefault();
+            report.MachineDowntimeGroupId = existing?.MachineDowntimeGroupId ?? Guid.NewGuid();
+            report.MachineDowntimeStartedAt = existing?.MachineDowntimeStartedAt ?? existing?.CreatedAt ?? report.CreatedAt;
+        }
         db.Breakdowns.Add(report);
         AddNotifications(report, "new", $"🟠 Нова заявка APOLLO\n{Summary(report)}\n\n{(report.RequestType == Productivity ? "Простій не нараховується." : "Відлік простою машини розпочато. " + (report.HasReserveApollo == true ? "Простій процесу: 20 хв." : "Простій процесу триває до відновлення будь-якого APOLLO."))}");
         // One SaveChanges atomically inserts the report and the author/group outbox messages.
@@ -117,21 +123,26 @@ public sealed class BreakdownService(ApolloDbContext db, IConfiguration config)
         return report.Fingerprint == fingerprint ? report : throw new RuleException("Ідентифікатор вже використано для іншої заявки. Створіть нову заявку.", 409);
     }
 
-    public async Task DeleteAsync(int id, AppUser actor, CancellationToken ct)
+    public async Task DeleteAsync(int id, AppUser actor, CancellationToken ct) =>
+        _ = await ChangeProcessAsync(() => DeleteCoreAsync(id, actor, ct), ct);
+
+    private async Task<Breakdown> DeleteCoreAsync(int id, AppUser actor, CancellationToken ct)
     {
         RequireAccess(actor);
         if (!actor.IsAdmin) throw new RuleException("Видаляти заявки може лише адміністратор.", 403);
         var report = await db.Breakdowns.IgnoreQueryFilters().SingleOrDefaultAsync(x => x.Id == id && x.IsTest == db.TestMode, ct)
             ?? throw new RuleException("Заявку не знайдено.", 404);
-        if (report.DeletedAt is not null) return;
+        if (report.DeletedAt is not null) return report;
         var now = DateTimeOffset.UtcNow;
         report.DeletedAt = now;
         report.DeletedByUserId = actor.Id;
         report.Version = Guid.NewGuid();
+        if (report.MachineDowntimeGroupId is not null) await RegroupMachineAsync(report.MachineKey, ct);
         var pending = await db.Notifications.Where(x => x.BreakdownId == id && x.SentAt == null && x.CancelledAt == null).ToListAsync(ct);
         foreach (var notification in pending) { notification.CancelledAt = now; notification.Version = Guid.NewGuid(); }
         try { await db.SaveChangesAsync(ct); }
         catch (DbUpdateConcurrencyException) { throw new RuleException("Заявка змінилася. Оновіть журнал і повторіть видалення.", 409); }
+        return report;
     }
 
     public Task<Breakdown> RestoreAsync(int id, AppUser user, CancellationToken ct, bool fromConfiguredGroup = false) =>
@@ -148,14 +159,17 @@ public sealed class BreakdownService(ApolloDbContext db, IConfiguration config)
         report.RestoredAt = DateTimeOffset.UtcNow;
         report.RestoredByUserId = user.Id;
         report.Version = Guid.NewGuid();
-        var processOutages = await db.Breakdowns.Where(x => x.RequestType == Emergency && x.HasReserveApollo != true && x.ProcessRestoredAt == null).ToListAsync(ct);
+        if (report.MachineDowntimeGroupId is Guid group) await RefreshMachineGroupAsync(group, ct);
+        var otherFaults = await db.Breakdowns.Where(x => x.MachineKey == report.MachineKey && x.RequestType == Emergency && x.RestoredAt == null && x.Id != id).ToListAsync(ct);
+        var machineAvailable = otherFaults.Count == 0;
+        var processOutages = machineAvailable ? await db.Breakdowns.Where(x => x.RequestType == Emergency && x.HasReserveApollo != true && x.ProcessRestoredAt == null).ToListAsync(ct) : new List<Breakdown>();
         foreach (var outage in processOutages.Where(x => x.CreatedAt <= report.RestoredAt.Value)) {
             outage.ProcessRestoredAt = report.RestoredAt;
             outage.ProcessRestoredByBreakdownId = report.Id;
             outage.Version = Guid.NewGuid();
         }
         var duration = MachineDowntimeMinutes(report, DateTimeOffset.UtcNow);
-        AddNotifications(report, "restored", $"✅ Роботу відновлено\nЗаявка №{report.Id}\n{report.Machine} · {report.Site}\nНесправність: {report.Fault}\nТип заявки: {RequestTypeLabel(report.RequestType)}\nЧас простою машини: {duration} хв\nЧас простою процесу: {ProcessDowntimeMinutes(report, DateTimeOffset.UtcNow)} хв\nЧас ремонту: {(report.RepairStartedAt is null ? "не фіксувався" : FormatDuration(RepairSeconds(report, DateTimeOffset.UtcNow)!.Value))}\nВідновлення зафіксував: {user.Name} (ID {user.Id})");
+        AddNotifications(report, "restored", $"✅ {(machineAvailable ? "Роботу APOLLO відновлено" : "Несправність усунено. APOLLO ще має відкриті аварійні заявки")}\nЗаявка №{report.Id}\n{report.Machine} · {report.Site}\nНесправність: {report.Fault}\nТип заявки: {RequestTypeLabel(report.RequestType)}\nЧас простою машини: {duration} хв\nЧас простою процесу: {ProcessDowntimeMinutes(report, DateTimeOffset.UtcNow)} хв\nЧас ремонту: {(report.RepairStartedAt is null ? "не фіксувався" : FormatDuration(RepairSeconds(report, DateTimeOffset.UtcNow)!.Value))}\nВиконання зафіксував: {user.Name} (ID {user.Id})", machineAvailable);
         try { await db.SaveChangesAsync(ct); }
         catch (DbUpdateConcurrencyException) {
             db.ChangeTracker.Clear();
@@ -186,7 +200,53 @@ public sealed class BreakdownService(ApolloDbContext db, IConfiguration config)
         return report;
     }
 
-    private List<Notification> AddNotifications(Breakdown report, string kind, string text)
+    private async Task RefreshMachineGroupAsync(Guid group, CancellationToken ct)
+    {
+        var records = (await db.Breakdowns.Where(x => x.MachineDowntimeGroupId == group).ToListAsync(ct)).Where(x => x.DeletedAt is null).ToList();
+        if (records.Count == 0) return;
+        SetMachineTimes(records);
+    }
+
+    private static void SetMachineTimes(List<Breakdown> records)
+    {
+        var start = records.Min(x => x.CreatedAt);
+        var last = records.Any(x => x.RestoredAt is null) ? null : records.OrderByDescending(x => x.RestoredAt).ThenByDescending(x => x.Id).First();
+        foreach (var record in records) {
+            record.MachineDowntimeStartedAt = start;
+            record.MachineRestoredAt = last?.RestoredAt;
+            record.MachineRestoredByBreakdownId = last?.Id;
+            record.Version = Guid.NewGuid();
+        }
+    }
+
+    private async Task RegroupMachineAsync(string key, CancellationToken ct)
+    {
+        var records = (await db.Breakdowns.Where(x => x.MachineKey == key && x.RequestType == Emergency).ToListAsync(ct))
+            .Where(x => x.DeletedAt is null).OrderBy(x => x.CreatedAt).ThenBy(x => x.Id).ToList();
+        var used = new HashSet<Guid>();
+        var episode = new List<Breakdown>();
+        DateTimeOffset? end = null;
+        void Flush() {
+            if (episode.Count == 0) return;
+            var group = episode[0].MachineDowntimeGroupId ?? Guid.NewGuid();
+            if (!used.Add(group)) { group = Guid.NewGuid(); used.Add(group); }
+            foreach (var member in episode) member.MachineDowntimeGroupId = group;
+            SetMachineTimes(episode);
+            episode.Clear();
+        }
+        foreach (var record in records) {
+            if (episode.Count > 0 && end is not null && record.CreatedAt > end.Value) Flush();
+            if (episode.Count == 0) end = record.RestoredAt;
+            else if (end is not null) end = record.RestoredAt is null ? null : (record.RestoredAt > end ? record.RestoredAt : end);
+            episode.Add(record);
+        }
+        Flush();
+    }
+
+    public Task<bool> MachineHasOpenFaultsAsync(Breakdown report, CancellationToken ct) =>
+        db.Breakdowns.AnyAsync(x => x.MachineKey == report.MachineKey && x.RequestType == Emergency && x.RestoredAt == null, ct);
+
+    private List<Notification> AddNotifications(Breakdown report, string kind, string text, bool machineAvailable = true)
     {
         var targets = new List<long>();
         if (!report.IsTest && kind != "repairStarted") targets.Add(report.TelegramUserId);
@@ -194,7 +254,7 @@ public sealed class BreakdownService(ApolloDbContext db, IConfiguration config)
         if (group < 0) targets.Add(group);
         var items = targets.Distinct().Select(chat => new Notification {
             Breakdown = report, ChatId = chat, Kind = kind,
-            Text = report.IsTest ? "🧪 ТЕСТОВА ЗАЯВКА\n" + text : chat > 0 ? (kind == "new" ? "Заявка прийнята." : "Роботу відновлено.") : text,
+            Text = report.IsTest ? "🧪 ТЕСТОВА ЗАЯВКА\n" + text : chat > 0 ? (kind == "new" ? "Заявка прийнята." : machineAvailable ? "Роботу відновлено." : "Несправність усунено.") : text,
             SentAt = config["Telegram:Mode"] == "Demo" ? DateTimeOffset.UtcNow : null
         }).ToList();
         db.Notifications.AddRange(items);
@@ -205,7 +265,7 @@ public sealed class BreakdownService(ApolloDbContext db, IConfiguration config)
         (report.HasReserveApollo is bool reserve ? $"\nРезервне APOLLO: {(reserve ? "Так" : "Ні")}" : "") +
         (report.Description.Length > 0 ? $"\nОпис: {report.Description[..Math.Min(report.Description.Length, 700)]}" : "");
 
-    public static long DowntimeSeconds(Breakdown report, DateTimeOffset now) => report.RequestType == Productivity ? 0 : Math.Max(0, (long)((report.RestoredAt ?? now) - report.CreatedAt).TotalSeconds);
+    public static long DowntimeSeconds(Breakdown report, DateTimeOffset now) => report.RequestType == Productivity ? 0 : Math.Max(0, (long)(((report.MachineDowntimeGroupId is null ? report.RestoredAt : report.MachineRestoredAt) ?? now) - (report.MachineDowntimeStartedAt ?? report.CreatedAt)).TotalSeconds);
     public static string RequestTypeLabel(string type) => type == Productivity ? "Зниження продуктивності" : "Аварійна";
     public static long MachineDowntimeMinutes(Breakdown report, DateTimeOffset now) => report.RequestType == Productivity ? 0 : DowntimeMinutes(DowntimeSeconds(report, now));
     public static long ProcessDowntimeSeconds(Breakdown report, DateTimeOffset now) => report.RequestType == Productivity ? 0 : report.HasReserveApollo == true ? 1200 :

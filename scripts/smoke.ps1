@@ -75,6 +75,9 @@ try {
     Assert ((Request "/breakdowns/$($other.id)/restore" $operator 'POST').StatusCode -eq 409) 'Repair service cannot finish before starting repair'
     Assert ((Request "/breakdowns/$($other.id)/start-repair" $operator 'POST').StatusCode -eq 200) 'Arriving worker can start another author report'
     Assert ((Request "/breakdowns/$($other.id)/restore" $operator 'POST').StatusCode -eq 200) 'Worker can finish another author report'
+    $partialHistory = ((Request '/breakdowns' $operator).Content | ConvertFrom-Json).items
+    $partialReport = $partialHistory | Where-Object id -eq $other.id
+    Assert ($null -ne $partialReport.restoredAt -and $partialReport.machineDowntimeRunning -and $partialReport.processDowntimeRunning) 'Closing one of two machine faults leaves machine and process downtime running'
     $started = (Request "/breakdowns/$($report.id)/start-repair" $admin 'POST').Content | ConvertFrom-Json
     $startedAgain = (Request "/breakdowns/$($report.id)/start-repair" $admin 'POST').Content | ConvertFrom-Json
     Assert ($started.repairStartedAt -eq $startedAgain.repairStartedAt) 'Repeated repair start preserves first arrival time'
@@ -83,7 +86,7 @@ try {
     Assert ($null -ne $closed.restoredAt -and $closed.restoredAt -eq $again.restoredAt) 'Restoration time is fixed and idempotent'
     $afterRecovery = (Request '/breakdowns' $operator).Content | ConvertFrom-Json
     $recoveredProcess = $afterRecovery.items | Where-Object id -eq $report.id
-    Assert ($null -ne $recoveredProcess.processRestoredAt -and $recoveredProcess.processRestoredByBreakdownId -eq $other.id -and -not $recoveredProcess.processDowntimeRunning) 'Process recovery is persisted independently of machine closure'
+    Assert ($null -ne $recoveredProcess.processRestoredAt -and $recoveredProcess.processRestoredByBreakdownId -eq $report.id -and -not $recoveredProcess.processDowntimeRunning) 'Process recovery is persisted independently of machine closure'
     $slowBody = $body.Clone(); $slowBody.requestId = [guid]::NewGuid().ToString(); $slowBody.requestType = 'productivity'; $slowBody.hasReserveApollo = $null
     $slow = (Request '/breakdowns' $operator 'POST' $slowBody).Content | ConvertFrom-Json
     $slowState = ((Request '/breakdowns' $operator).Content | ConvertFrom-Json).items | Where-Object id -eq $slow.id

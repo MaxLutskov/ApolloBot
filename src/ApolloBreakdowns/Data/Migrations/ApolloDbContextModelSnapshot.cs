@@ -145,6 +145,23 @@ namespace ApolloBreakdowns.Data.Migrations
                         .HasMaxLength(300)
                         .HasColumnType("nvarchar(300)");
 
+                    b.Property<Guid?>("MachineDowntimeGroupId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset?>("MachineDowntimeStartedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("MachineKey")
+                        .IsRequired()
+                        .HasMaxLength(350)
+                        .HasColumnType("nvarchar(350)");
+
+                    b.Property<DateTimeOffset?>("MachineRestoredAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<int?>("MachineRestoredByBreakdownId")
+                        .HasColumnType("int");
+
                     b.Property<string>("Node")
                         .IsRequired()
                         .HasMaxLength(300)
@@ -220,9 +237,13 @@ namespace ApolloBreakdowns.Data.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("MachineDowntimeGroupId");
+
                     b.HasIndex("RequestType", "ProcessRestoredAt");
 
                     b.HasIndex("TelegramUserId", "CreatedAt");
+
+                    b.HasIndex("IsTest", "MachineKey", "RestoredAt");
 
                     b.HasIndex("IsTest", "TelegramUserId", "RequestId")
                         .IsUnique();

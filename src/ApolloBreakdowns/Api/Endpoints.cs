@@ -32,9 +32,10 @@ public static class Endpoints
             var p = Math.Clamp(page ?? 1, 1, 100000);
             var items = await q.OrderByDescending(x => x.CreatedAt).ThenByDescending(x => x.Id).Skip((p - 1) * 20).Take(20).ToListAsync(ct);
             return Results.Ok(new { total = await q.CountAsync(ct), page = p, pageSize = 20, serverTime = DateTimeOffset.UtcNow,
-                items = items.Select(x => new { x.Id, x.IsTest, x.Site, x.Shift, x.Person, x.Machine, x.Part, x.Node, x.Fault, x.Description,
+                items = items.Select(x => new { x.Id, x.IsTest, x.MachineDowntimeGroupId, x.MachineDowntimeStartedAt, x.MachineRestoredAt, x.MachineRestoredByBreakdownId, x.Site, x.Shift, x.Person, x.Machine, x.Part, x.Node, x.Fault, x.Description,
                     x.RepairMethod, x.RequestType, x.ProcessRestoredAt, x.ProcessRestoredByBreakdownId, x.HasReserveApollo, x.RequiresRepairStart, x.RepairStartedAt, x.RepairStartedByUserId, x.CreatedAt, x.RestoredAt, x.RestoredByUserId,
                     downtimeSeconds = BreakdownService.DowntimeSeconds(x, DateTimeOffset.UtcNow),
+                    machineDowntimeRunning = x.RequestType == BreakdownService.Emergency && (x.MachineDowntimeGroupId == null ? x.RestoredAt == null : x.MachineRestoredAt == null),
                     processDowntimeSeconds = BreakdownService.ProcessDowntimeSeconds(x, DateTimeOffset.UtcNow),
                     processDowntimeRunning = x.RequestType == BreakdownService.Emergency && x.HasReserveApollo != true && x.ProcessRestoredAt == null, repairSeconds = BreakdownService.RepairSeconds(x, DateTimeOffset.UtcNow),
                     canStartRepair = x.RestoredAt is null && x.RequiresRepairStart && x.RepairStartedAt is null,

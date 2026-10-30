@@ -110,7 +110,8 @@ public sealed class TelegramClient(HttpClient http, IConfiguration config, Break
                 }
                 await breakdowns.SelectTelegramModeAsync(confirmation.ReportId, actor, chatId, ct);
                 var report = confirmation.Start ? await breakdowns.StartRepairAsync(confirmation.ReportId, actor, ct) : await breakdowns.RestoreAsync(confirmation.ReportId, actor, ct);
-                text = confirmation.Start ? "Початок ремонту зафіксовано." : $"Роботу відновлено. Простій машини: {BreakdownService.MachineDowntimeMinutes(report, DateTimeOffset.UtcNow)} хв; процесу: {BreakdownService.ProcessDowntimeMinutes(report, DateTimeOffset.UtcNow)} хв.";
+                var machineBlocked = await breakdowns.MachineHasOpenFaultsAsync(report, ct);
+                text = confirmation.Start ? "Початок ремонту зафіксовано." : $"{(machineBlocked ? "Несправність усунено, інші аварійні заявки залишаються." : "Роботу відновлено.")} Простій машини: {BreakdownService.MachineDowntimeMinutes(report, DateTimeOffset.UtcNow)} хв; процесу: {BreakdownService.ProcessDowntimeMinutes(report, DateTimeOffset.UtcNow)} хв.";
                 await DismissConfirmationAsync(chatId, messageId, ct);
                 try { await CallAsync("editMessageReplyMarkup", new { chat_id = chatId, message_id = confirmation.MessageId, reply_markup = report.RestoredAt is null ? Keyboard(report.Id, report.RequiresRepairStart && report.RepairStartedAt is null) : (object)new { inline_keyboard = Array.Empty<object>() } }, ct); }
                 catch (TelegramException) { }
@@ -127,7 +128,7 @@ public sealed class TelegramClient(HttpClient http, IConfiguration config, Break
                 await CallAsync("sendMessage", new {
                     chat_id = chatId,
                     text = (report.IsTest ? "🧪 ТЕСТ\n" : "") + $"{actor.Name}, підтвердьте {(start ? "початок ремонту" : "завершення робіт")} за заявкою №{reportId}\n{report.Machine} · {report.Site}" +
-                        (start ? "" : "\nБуде завершено поточний простій процесу для всіх APOLLO без резерву."),
+                        (start ? "" : "\nПростій машини завершиться після закриття всіх її аварійних заявок. Тоді завершиться й простій процесу."),
                     reply_markup = new { inline_keyboard = new[] { new[] {
                         new { text = "✅ Підтвердити", callback_data = "ok:" + token },
                         new { text = "Скасувати", callback_data = "no:" + token }
