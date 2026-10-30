@@ -93,7 +93,7 @@ public sealed class TelegramClient(HttpClient http, IConfiguration config, Break
             var hasMessage = callback.TryGetProperty("message", out var message);
             var chatId = hasMessage ? message.GetProperty("chat").GetProperty("id").GetInt64() : 0;
             var report = start ? await breakdowns.StartRepairAsync(reportId, actor, ct) : await breakdowns.RestoreAsync(reportId, actor, ct);
-            text = start ? "Початок ремонту зафіксовано." : $"Роботу відновлено. Простій: {BreakdownService.FormatDuration(BreakdownService.DowntimeSeconds(report, DateTimeOffset.UtcNow))}.";
+            text = start ? "Початок ремонту зафіксовано." : $"Роботу відновлено. Простій: {BreakdownService.FormatDowntime(BreakdownService.DowntimeSeconds(report, DateTimeOffset.UtcNow))}.";
             if (hasMessage) {
                 // Removing a button is best effort; database idempotency remains authoritative.
                 try { await CallAsync("editMessageReplyMarkup", new { chat_id = chatId, message_id = message.GetProperty("message_id").GetInt32(), reply_markup = report.RestoredAt is null ? Keyboard(reportId, report.RequiresRepairStart && report.RepairStartedAt is null) : (object)new { inline_keyboard = Array.Empty<object>() } }, ct); }

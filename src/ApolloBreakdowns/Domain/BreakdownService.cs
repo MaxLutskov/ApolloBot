@@ -88,7 +88,7 @@ public sealed class BreakdownService(ApolloDbContext db, IConfiguration config)
         report.RestoredAt = DateTimeOffset.UtcNow;
         report.RestoredByUserId = user.Id;
         report.Version = Guid.NewGuid();
-        var duration = FormatDuration(DowntimeSeconds(report, DateTimeOffset.UtcNow));
+        var duration = FormatDowntime(DowntimeSeconds(report, DateTimeOffset.UtcNow));
         var notifications = AddNotifications(report, "restored", $"✅ Роботу відновлено\nЗаявка №{report.Id}\n{report.Machine} · {report.Site}\nНесправність: {report.Fault}\nЧас простою: {duration}\nЧас ремонту: {(report.RepairStartedAt is null ? "не фіксувався" : FormatDuration(RepairSeconds(report, DateTimeOffset.UtcNow)!.Value))}\nВідновлення зафіксував: {user.Name} (ID {user.Id})");
         try { await db.SaveChangesAsync(ct); }
         catch (DbUpdateException) {
@@ -141,6 +141,8 @@ public sealed class BreakdownService(ApolloDbContext db, IConfiguration config)
         (report.Description.Length > 0 ? $"\nОпис: {report.Description[..Math.Min(report.Description.Length, 700)]}" : "");
 
     public static long DowntimeSeconds(Breakdown report, DateTimeOffset now) => Math.Max(0, (long)((report.RestoredAt ?? now) - report.CreatedAt).TotalSeconds);
+    public static long DowntimeMinutes(long seconds) => Math.Max(10, (long)Math.Round(seconds / 60m, 0, MidpointRounding.AwayFromZero));
+    public static string FormatDowntime(long seconds) => $"{DowntimeMinutes(seconds)} хв";
     public static long? RepairSeconds(Breakdown report, DateTimeOffset now) => report.RepairStartedAt is null ? null : Math.Max(0, (long)((report.RestoredAt ?? now) - report.RepairStartedAt.Value).TotalSeconds);
     public static string FormatDuration(long seconds) => seconds < 60 ? "менше 1 хв" : $"{seconds / 60} хв";
 }

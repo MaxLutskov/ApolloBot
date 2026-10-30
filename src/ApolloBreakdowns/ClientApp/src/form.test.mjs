@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { available, changeField, durationText, missingFields, cascadeOther } from './form.mjs'
+import { available, changeField, durationText, downtimeText, missingFields, cascadeOther } from './form.mjs'
 
 test('changing parent clears dependent values and changes idempotency key', () => {
   const next = changeField({ partId: '1', nodeId: '2', faultId: '3' }, 'partId', '4', 'new-id')
@@ -39,4 +39,11 @@ test('validation names required description and reserve answer', () => {
   const missing = missingFields(form, options)
   assert.ok(missing.some(x => x.field === 'description'))
   assert.ok(missing.some(x => x.field === 'hasReserveApollo'))
+})
+
+test('downtime has a ten minute minimum and rounds longer durations', () => {
+  for (const seconds of [0, 1, 59, 302, 599, 600, 629]) assert.equal(downtimeText(seconds), '10 хв')
+  assert.equal(downtimeText(630), '11 хв')
+  assert.equal(downtimeText(900), '15 хв')
+  assert.equal(durationText(30), 'менше 1 хв')
 })

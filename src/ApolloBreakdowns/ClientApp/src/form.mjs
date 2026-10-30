@@ -38,3 +38,5 @@ export function missingFields(form, options) {
     result.push({ field: 'hasReserveApollo', label: 'Чи є резервне APOLLO?' })
   return result
 }
+
+export const downtimeText = seconds => durationText(Math.max(10, Math.round(seconds / 60)) * 60)

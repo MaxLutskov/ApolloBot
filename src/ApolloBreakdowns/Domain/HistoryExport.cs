@@ -21,7 +21,7 @@ public static class HistoryExport
             Row(r.Id.ToString(), LocalTime(r.CreatedAt), r.Site, r.Shift, r.Person, r.Machine, r.Part, r.Node, r.Fault, r.Description, r.RepairMethod,
                 r.HasReserveApollo is bool reserve ? (reserve ? "Так" : "Ні") : "", LocalTime(r.RepairStartedAt), r.RepairStartedByUserId?.ToString() ?? "",
                 LocalTime(r.RestoredAt), r.RestoredAt is not null ? "Роботу відновлено" : r.RepairStartedAt is not null ? "Ремонт триває" : "Очікує вирішення",
-                Math.Round(BreakdownService.DowntimeSeconds(r, now) / 60m, 0, MidpointRounding.AwayFromZero).ToString(System.Globalization.CultureInfo.InvariantCulture), BreakdownService.RepairSeconds(r, now)?.ToString() ?? "", r.RestoredByUserId?.ToString() ?? "");
+                BreakdownService.DowntimeMinutes(BreakdownService.DowntimeSeconds(r, now)).ToString(System.Globalization.CultureInfo.InvariantCulture), BreakdownService.RepairSeconds(r, now)?.ToString() ?? "", r.RestoredByUserId?.ToString() ?? "");
             if (result.Length > 12_000_000) throw new RuleException("Журнал завеликий для одного CSV-файлу.");
         }
         return Encoding.UTF8.GetBytes(result.ToString());

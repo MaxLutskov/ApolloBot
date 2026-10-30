@@ -40,7 +40,7 @@ public sealed class ReminderService(ApolloDbContext db, IConfiguration config)
         var reports = await db.Breakdowns.AsNoTracking().Where(x => x.RestoredAt == null).OrderBy(x => x.Id).Take(15).ToListAsync(ct);
         var text = new StringBuilder($"⏰ Невиконані заявки APOLLO: {total}\n");
         foreach (var r in reports)
-            text.Append($"\n#{r.Id} · {Short(r.Site, 40)} · {Short(r.Machine, 40)}\n{Short(r.Fault, 80)} · простій {BreakdownService.FormatDuration(BreakdownService.DowntimeSeconds(r, now))}\n{(r.RepairStartedAt is null ? "Очікує вирішення" : "Ремонт триває")}\n");
+            text.Append($"\n#{r.Id} · {Short(r.Site, 40)} · {Short(r.Machine, 40)}\n{Short(r.Fault, 80)} · простій {BreakdownService.FormatDowntime(BreakdownService.DowntimeSeconds(r, now))}\n{(r.RepairStartedAt is null ? "Очікує вирішення" : "Ремонт триває")}\n");
         if (total > reports.Count) text.Append($"\nЩе {total - reports.Count} заявок — у спільному журналі.");
         return text.ToString();
     }

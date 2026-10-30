@@ -238,6 +238,14 @@ await db.SaveChangesAsync();
 Check((await db.Users.AsNoTracking().SingleAsync(x => x.Id == 777)).LastSeenAt.Offset == TimeSpan.FromHours(2), "Updated timestamps are normalized to Kyiv on subsequent saves");
 var autumn = new Breakdown { CreatedAt = ApplicationTime.InKyiv(new DateTimeOffset(2026, 10, 25, 0, 30, 0, TimeSpan.Zero)), RestoredAt = ApplicationTime.InKyiv(new DateTimeOffset(2026, 10, 25, 1, 30, 0, TimeSpan.Zero)) };
 Check(autumn.CreatedAt.Hour == autumn.RestoredAt.Value.Hour && BreakdownService.DowntimeSeconds(autumn, now) == 3600, "Downtime remains correct across the autumn clock change");
+foreach (var seconds in new long[] { 0, 1, 59, 302, 599, 600, 629 })
+    Check(BreakdownService.DowntimeMinutes(seconds) == 10, $"Downtime minimum applies to {seconds} seconds");
+Check(BreakdownService.DowntimeMinutes(630) == 11 && BreakdownService.DowntimeMinutes(900) == 15, "Longer downtime rounds to whole minutes");
+Check(BreakdownService.FormatDowntime(30) == "10 хв" && BreakdownService.FormatDuration(30) == "менше 1 хв", "Minimum applies only to downtime, not repair duration");
+db.Breakdowns.Add(new Breakdown { RequestId = Guid.NewGuid(), TelegramUserId = owner.Id, Machine = "MIN-DOWNTIME", CreatedAt = now.AddSeconds(-30), RepairStartedAt = now.AddSeconds(-20), RestoredAt = now });
+await db.SaveChangesAsync();
+var minimumRow = Encoding.UTF8.GetString(await HistoryExport.BuildAsync(db, default)).Split('\n').Single(line => line.Contains("MIN-DOWNTIME")).Split(';');
+Check(minimumRow[16].Trim('"') == "10" && minimumRow[17].Trim('"') == "20", "CSV exports ten minute minimum while preserving actual repair seconds");
 Console.WriteLine($"{passed} checks passed.");
 
 sealed class RecordingHandler : HttpMessageHandler
